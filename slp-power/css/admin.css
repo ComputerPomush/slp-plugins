@@ -1,0 +1,252 @@
+/* Power Admin CSS
+ * Compiled with SCSS file watcher rules in phpStorm into admin.css and then admin.min.css
+ */
+.slp_power_admin_css {
+  font-size: 1em; }
+
+.dashicons.stat {
+  width: auto;
+  height: auto; }
+
+span.reload_icon {
+  float: right;
+  width: 100%;
+  text-align: right;
+  cursor: pointer; }
+
+div.section_description {
+  padding: 6px; }
+
+#wpcsl_container a.new_button {
+  color: #666666;
+  background-color: #F6F5F1;
+  border: 1px solid #CCCCCC;
+  border-radius: 4px;
+  display: block;
+  position: relative;
+  text-decoration: none;
+  margin: 0.3em auto;
+  vertical-align: top;
+  box-shadow: none;
+  font-size: 1.6em;
+  font-weight: 400;
+  font-family: "Open Sans", sans-serif;
+  height: 4em;
+  line-height: 4em;
+  width: 20em;
+  text-align: center; }
+  #wpcsl_container a.new_button .icon-label {
+    font-size: 1.5em;
+    font-weight: 400;
+    width: 100%;
+    padding-top: 0.5em; }
+    #wpcsl_container a.new_button .icon-label:before {
+      padding-right: 0.25em; }
+#wpcsl_container .ui-dialog {
+  z-index: 999; }
+  #wpcsl_container .ui-dialog .ui-dialog-titlebar .ui-button {
+    float: right; }
+#wpcsl_container .upload_status {
+  border: none;
+  text-align: center;
+  font-size: 1.5em;
+  color: #666666;
+  line-height: 3em; }
+#wpcsl_container .slp_progress .slp_upload_process {
+  border: none; }
+#wpcsl_container .slp_progress .ui-progressbar-value {
+  height: 1em;
+  background: #5ea54d;
+  border: none;
+  -moz-border-radius: 8px;
+  -webkit-border-radius: 8px;
+  border-radius: 8px; }
+#wpcsl_container .slp_upload_info {
+  margin: 0.5em auto;
+  text-align: left; }
+  #wpcsl_container .slp_upload_info .upload_report {
+    display: block; }
+
+#slp-power_message_board {
+  display: none;
+  float: right; }
+
+/*
+ * Location Import
+ */
+form#importForm input.button-primary {
+  margin-left: 0.25em; }
+form#importForm .cron_message {
+  display: block; }
+form#importForm .cron_message_block,
+form#importForm .import_message_block {
+  max-height: 30em;
+  overflow-y: scroll;
+  overflow-x: hidden; }
+
+/*
+ * Location Export
+ */
+div.filter_box {
+  padding-left: 12px;
+  margin-top: -10px; }
+
+div#csa-slp-power-location-filters input#name {
+  width: 75%; }
+div#csa-slp-power-location-filters select {
+  clear: both;
+  float: none;
+  height: auto; }
+div#csa-slp-power-location-filters label {
+  width: 65px; }
+div#csa-slp-power-location-filters li {
+  list-style-type: none; }
+
+div#export_button_wrapper {
+  margin-top: 12px;
+  text-align: center; }
+
+/**
+ * Reports
+ */
+div#wpcsl_settings_group-top_10_addresses_searched caption, div#wpcsl_settings_group-top_10_addresses_searched th, div#wpcsl_settings_group-top_10_addresses_searched td, div#wpcsl_settings_group-top_10_results_returned caption, div#wpcsl_settings_group-top_10_results_returned th, div#wpcsl_settings_group-top_10_results_returned td {
+  line-height: 2em;
+  min-width: 3em;
+  padding: 0 0.3em;
+  vertical-align: top; }
+div#wpcsl_settings_group-top_10_addresses_searched th, div#wpcsl_settings_group-top_10_results_returned th {
+  background-color: #D0D0D0;
+  font-weight: 700;
+  cursor: s-resize; }
+div#wpcsl_settings_group-top_10_addresses_searched .button-secondary, div#wpcsl_settings_group-top_10_results_returned .button-secondary {
+  margin: 0.25em; }
+div#wpcsl_settings_group-top_10_addresses_searched div.total, div#wpcsl_settings_group-top_10_results_returned div.total {
+  margin: 0.25em; }
+
+p.footernote {
+  font-style: italic;
+  color: #666666; }
+p.lvl1 {
+  margin-left: 18px; }
+
+.dashicons.dashicons-media-document.haspage_icon {
+  color: green; }
+
+#slp_pages_fields div.row-actions {
+  margin-left: 5em; }
+
+/** WP Category Interface **/
+.fixed .column-locations,
+.fixed .column-rank,
+.fixed .column-icon {
+  width: 10%; }
+
+/* Category list items */
+span.catname {
+  display: inline-block;
+  margin-right: 10px;
+  min-width: 150px;
+  text-align: right; }
+
+/* Category edit form */
+/* Category add form */
+div#medium-icon_icon_row.slp_icon_row,
+div#map-marker_icon_row.slp_icon_row {
+  margin: 6px 3px 24px 3px;
+  width: 100%; }
+
+/* Inline manage location category editor */
+td#slp_manual_update_table_right_cell {
+  min-width: 400px;
+  position: relative;
+  display: block; }
+
+div#slp_edit_right_column {
+  min-width: 200px;
+  min-height: 300px;
+  float: left; }
+
+/* Manage Location Display */
+div.tagalong_entry {
+  margin-bottom: 6px;
+  margin-right: 8px;
+  text-align: center; }
+
+span.tagalong_entry_name {
+  width: 100%;
+  display: block; }
+
+img.slp_map_marker {
+  vertical-align: text-top; }
+
+/* Text formatting */
+p.lvl1 {
+  margin-left: 18px; }
+
+p.footernote {
+  font-style: italic;
+  color: #666666; }
+
+#slp_tagalong_fields ul {
+  clear: both;
+  float: none;
+  width: 100%;
+  margin: 0 0 0 2em; }
+  #slp_tagalong_fields ul.children {
+    margin-left: 20px;
+    padding-bottom: 6px;
+    padding-top: 6px; }
+#slp_tagalong_fields li {
+  clear: both;
+  float: none;
+  line-height: 1.25em; }
+#slp_tagalong_fields label {
+  clear: both;
+  float: none;
+  text-align: left;
+  margin: 0; }
+
+/**
+ * Tagalong Tab / Store Categories Panel / Category List
+ **/
+#wpcsl-option-store_categories #wpcsl_settings_group-list ul.children {
+  padding: 3px 0 3px 24px; }
+
+/** Manage Locations Page **/
+.slp_manage_locations_cell.categories span.legend_text {
+  display: block; }
+
+/**
+ * edit-tags.php (category editor)
+ **/
+div#slp_extended_data .form-field {
+  display: block; }
+  div#slp_extended_data .form-field.icon_setting {
+    display: inline-block; }
+    div#slp_extended_data .form-field.icon_setting LABEL,
+    div#slp_extended_data .form-field.icon_setting INPUT {
+      display: inline-block; }
+    div#slp_extended_data .form-field.icon_setting .slp_category_image {
+      border: 1px dotted #444444;
+      padding: 0.5em;
+      text-align: center;
+      width: 3em; }
+  div#slp_extended_data .form-field.short_field INPUT {
+    max-width: 3em; }
+
+#input-group-map-marker, #input-group-medium-icon {
+  display: inherit; }
+
+.slp_icon_row .slp_icon_selector_box {
+  display: inline-block;
+  margin: 3px;
+  border: 1px solid rgba(0, 0, 0, 0);
+  float: left;
+  min-height: 48px;
+  min-width: 48px;
+  text-align: center; }
+  .slp_icon_row .slp_icon_selector_box:hover {
+    background-color: #FFFFDD;
+    border: 1px solid #AAAAAA; }
+
+/*# sourceMappingURL=admin.css.map */

@@ -1,0 +1,2174 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Store Locator Plus - Power\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2020-11-23 11:57+0100\n"
+"PO-Revision-Date: 2020-11-23 11:57+0100\n"
+"Last-Translator: De B.A.A.T. <wordpress@de-baat.nl>\n"
+"Language-Team: De B.A.A.T. <wordpress@de-baat.nl>\n"
+"Language: nl_NL\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Poedit 2.4.2\n"
+"X-Poedit-SourceCharset: UTF-8\n"
+"X-Poedit-KeywordsList: __;_e;__ngettext:1,2;_n:1,2;__ngettext_noop:1,2;"
+"_n_noop:1,2;_c,_nc:4c,1,2;_x:1,2c;_ex:1,2c;_nx:4c,1,2;_nx_noop:4c,1,2\n"
+"X-Poedit-Basepath: ..\n"
+"X-Textdomain-Support: yes\n"
+"X-Poedit-SearchPath-0: .\n"
+
+# @ slp-power
+#: include/SLPPower.php:113
+msgid "Power"
+msgstr "Power"
+
+# @ slp-power
+#: include/SLPPower.php:496
+msgid "Reports"
+msgstr "Rapporten"
+
+# @ slp-power
+#: include/SLPPower.php:503 include/module/admin/SLP_Power_Admin.php:365
+#: include/module/admin/SLP_Power_Admin.php:386
+#: include/module/text/SLP_Power_Text.php:66
+msgid "Categories"
+msgstr "Categorieën"
+
+#: include/SLPPower.php:689
+msgid "Geocoding location ID is empty."
+msgstr "Geocoding locatie id is leeg."
+
+#: include/base/loader.php:12
+msgid " requires Store Locator Plus® to function properly. "
+msgstr " heeft Store Locator Plus® nodig om correct te functioneren. "
+
+# @ slp-power
+#: include/base/loader.php:14 include/base/loader.php:32
+msgid "This plugin has been deactivated."
+msgstr "Deze plug-in is gedeactiveerd."
+
+#: include/base/loader.php:15 include/base/loader.php:33
+msgid "Please install Store Locator Plus®."
+msgstr "Installeer Store Locator Plus® aub."
+
+#: include/base/loader.php:30
+msgid " requires WordPress 4.4 to function properly. "
+msgstr " heeft WordPress 4.4 nodig om correct te kunnen functioneren. "
+
+# @ slp-power
+#: include/class.activation.php:51
+msgid "Identifier"
+msgstr "Identifier"
+
+# @ slp-power
+#: include/class.activation.php:57
+msgid ""
+"The identifier field is meant to store a unique location record ID from an "
+"external data source. "
+msgstr ""
+"Het id-veld is bedoeld om een unieke locatierecord-id op te slaan uit een "
+"externe gegevensbron. "
+
+# @ slp-power
+#: include/class.activation.php:58
+msgid ""
+"During a CSV import, this field is used to match up incoming data with "
+"existing locations. "
+msgstr ""
+"Tijdens een CSV-import wordt dit veld gebruikt om binnenkomende gegevens te "
+"koppelen aan bestaande locaties. "
+
+# @ slp-power
+#: include/class.activation.php:60
+msgid "Contact"
+msgstr "Contact"
+
+# @ slp-power
+#: include/class.activation.php:61
+msgid "First Name"
+msgstr "Voornaam"
+
+# @ slp-power
+#: include/class.activation.php:62
+msgid "Last Name"
+msgstr "Achternaam"
+
+# @ slp-power
+#: include/class.activation.php:63
+msgid "Title"
+msgstr "Titel"
+
+# @ slp-power
+#: include/class.activation.php:64
+msgid "Department"
+msgstr "Departement"
+
+# @ slp-power
+#: include/class.activation.php:65
+msgid "Training"
+msgstr "Training"
+
+# @ slp-power
+#: include/class.activation.php:66
+msgid "Facility Type"
+msgstr "Faciliteit Type"
+
+# @ slp-power
+#: include/class.activation.php:67
+msgid "Office Phone"
+msgstr "Zakelijke Telefoon"
+
+# @ slp-power
+#: include/class.activation.php:68
+msgid "Mobile Phone"
+msgstr "Mobiele Telefoon"
+
+# @ slp-power
+#: include/class.activation.php:69
+msgid "Contact Fax"
+msgstr "Contact Fax"
+
+# @ slp-power
+#: include/class.activation.php:70
+msgid "Contact Email"
+msgstr "Contact Email"
+
+# @ slp-power
+#: include/class.activation.php:71
+msgid "Office Hours"
+msgstr "Openingstijden"
+
+# @ slp-power
+#: include/class.activation.php:72
+msgid "Contact Address"
+msgstr "Contact Adressen"
+
+# @ slp-power
+#: include/class.activation.php:73
+msgid "Notes"
+msgstr "Notities"
+
+# @ slp-power
+#: include/class.activation.php:74
+msgid "Introduction"
+msgstr "Introductie"
+
+# @ slp-power
+#: include/class.activation.php:75
+msgid "Year Established"
+msgstr "Jaar De oprichting van"
+
+# @ slp-power
+#: include/class.activation.php:76
+msgid "County"
+msgstr "Provincie"
+
+# @ slp-power
+#: include/class.activation.php:77
+msgid "District"
+msgstr "District"
+
+# @ slp-power
+#: include/class.activation.php:78
+msgid "Region"
+msgstr "Regio"
+
+# @ slp-power
+#: include/class.activation.php:79
+msgid "Territory"
+msgstr "Grondgebied"
+
+#: include/class.activation.php:80
+msgid "Image"
+msgstr "Afbeelding"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:209
+msgid "Location Processing Info"
+msgstr "Locatie Verwerk Info"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:253
+#, php-format
+msgid "The %s add-on deactivated the conflicting %s add-on. "
+msgstr "De %s add-on deactiveerde de conflicterende %s add-on. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:296
+msgid "No data recorded yet. "
+msgstr "Nog geen data opgeslagen. "
+
+#: include/module/admin/SLP_Power_Admin.php:297
+msgid "Chart will be available after a search has been performed."
+msgstr "Grafiek zal beschikbaar zijn nadat een zoekopdracht is uitgevoerd."
+
+#: include/module/admin/SLP_Power_Admin.php:299
+msgid "Days With Activity: "
+msgstr "Dagen met activiteit: "
+
+#: include/module/admin/SLP_Power_Admin.php:300
+msgid "There is no data available for this report."
+msgstr "Er zijn geen gegevens beschikbaar voor dit rapport."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:301
+msgid "Search"
+msgstr "Zoek"
+
+#: include/module/admin/SLP_Power_Admin.php:302
+msgid "Top Addresses Searched"
+msgstr "Top Adressen Gezocht"
+
+#: include/module/admin/SLP_Power_Admin.php:303
+msgid "Top Locations Returned"
+msgstr "Top Resultaten Getoond"
+
+#: include/module/admin/SLP_Power_Admin.php:304
+msgid "Total Searches: "
+msgstr "Totaal aantal zoekopdrachten: "
+
+#: include/module/admin/SLP_Power_Admin.php:305
+msgid "Total Results: "
+msgstr "Totaal Resultaten: "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:316
+msgid "Address"
+msgstr "Adres"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:317
+#: include/module/admin/SLP_Power_Admin.php:329
+msgid "Total"
+msgstr "Totaal"
+
+#: include/module/admin/SLP_Power_Admin.php:324
+msgid "Location"
+msgstr "Locatie"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:325
+msgid "City"
+msgstr "Plaats"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:326
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:133
+msgid "State"
+msgstr "Provincie"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:327
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:104
+msgid "Zip"
+msgstr "Postcode"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:328
+#: include/module/admin/SLP_Power_Admin.php:432
+msgid "Tags"
+msgstr "Tags"
+
+#: include/module/admin/SLP_Power_Admin.php:414
+msgid "Category Marker"
+msgstr "Categorie Merkteken"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:474
+msgid "Show Uncoded"
+msgstr "Toon Nietgecodeerden"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:478
+msgid "With These Properties"
+msgstr "Met Deze Eigenschappen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin.php:487
+msgid "In These Categories"
+msgstr "In Deze Categorieën"
+
+#: include/module/admin/SLP_Power_Admin_General_Text.php:19
+msgid "Log import messages."
+msgstr "Log importberichten."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:20
+msgid "Add detailed contacts fields to your locations data. "
+msgstr ""
+"Voeg gedetailleerde contactpersonenvelden toe aan uw locatie gegevens. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:21
+msgid ""
+"Includes an intelligent \"Identifier\" field that maintains links to "
+"external data sources through CSV import."
+msgstr ""
+"Bevat een intelligent veld 'Id' dat koppelingen naar externe gegevensbronnen "
+"onderhoudt via CSV-import."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:22
+msgid "Use use nonces on [slp_directory] shortcode links. "
+msgstr "Gebruik nonces op [slp_directory] shortcode-koppelingen. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:23
+msgid ""
+"Nonces make it harder to build search engine optimized links but harder for "
+"competitors to steal data. "
+msgstr ""
+"Nonces maken het moeilijker om zoekmachine geoptimaliseerde links te bouwen, "
+"maar moeilijker voor concurrenten om gegevens te stelen. "
+
+#: include/module/admin/SLP_Power_Admin_General_Text.php:24
+msgid ""
+"Pages are search engine friendly and are linked directly to your live "
+"location data."
+msgstr ""
+"Pagina's zijn zoekmachinevriendelijk en zijn direct gekoppeld aan uw live "
+"locatie gegevens."
+
+#: include/module/admin/SLP_Power_Admin_General_Text.php:25
+msgid "Will ask visitors if they want to allow location sensing (gps). "
+msgstr ""
+"Zal bezoekers vragen of ze locatie sensing (gps) mogelijk willen maken. "
+
+#: include/module/admin/SLP_Power_Admin_General_Text.php:26
+msgid "Your site MUST be using HTTPS for the location sensor to work."
+msgstr "Uw site moet HTTPS gebruiken om de locatie sensor te laten werken."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:42
+msgid "Highlight Uncoded"
+msgstr "Markeer Niet-gecodeerden"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:43
+msgid "Log Import Messages"
+msgstr "Log importberichten"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:44
+msgid "Enable Contact Fields"
+msgstr "Inschakelen Contactvelden"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:45
+msgid "Use Nonces On Directory"
+msgstr "Nonces Gebruiken Op Directory"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_General_Text.php:46
+msgid "Enable Pages"
+msgstr "Inschakelen Pagina's"
+
+#: include/module/admin/SLP_Power_Admin_General_Text.php:47
+msgid "Use Location Sensor"
+msgstr "Gebruik Locatie Sensor"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:38
+msgid "Location Filter: "
+msgstr "Locatie Filter: "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:81
+msgid "and"
+msgstr "en"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:82
+msgid "or"
+msgstr "of"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:98
+#: include/module/options/SLP_Power_Options.php:161
+msgid "Category"
+msgstr "Categorie"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:102
+msgid "Store Name My Place or My* or *Place"
+msgstr "Store Naam Mijn Plaats of Mijn* of *Plaats"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:102
+msgid "Name"
+msgstr "Naam"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:104
+msgid "Zip Code 29464 or 294* or *464"
+msgstr "Postcode 1234AB of 123* of *4AB"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:127
+msgid "Country"
+msgstr "Land"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:128
+msgid "All Countries"
+msgstr "Alle Landen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Location_Filters.php:134
+msgid "All States"
+msgstr "Alle Provincies"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:47
+msgid "Select your categories: "
+msgstr "Selecteer uw categorieën: "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:70
+msgid "Categorize"
+msgstr "Categoriseren"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:73
+msgid "Export, Download CSV"
+msgstr "Export, Download CSV"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:76
+msgid "Export, Hosted CSV"
+msgstr "Export, Hosted CSV"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:79
+msgid "Geocode Selected"
+msgstr "Geocode Geselecteerden"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:80
+msgid "Geocode All Uncoded"
+msgstr "Geocode Alle Niet-gecodeerden"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:81
+msgid "Tag"
+msgstr "Tag"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:84
+msgid "Enter your comma-separated tags:"
+msgstr "Geef je komma-gescheiden tags:"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations.php:88
+msgid "Tag, Remove"
+msgstr "Tag, Verwijderen"
+
+#: include/module/admin/SLP_Power_Admin_Locations_Actions.php:92
+msgid "No locations found to create pages."
+msgstr "Geen locaties gevonden om pagina's aan te maken."
+
+#: include/module/admin/SLP_Power_Admin_Locations_Actions.php:111
+msgid "Store Page could not be created."
+msgstr "Store Page kon niet aangemaakt worden."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:30
+msgid "Import"
+msgstr "Importeer"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:73
+#, php-format
+msgid "Download your %s"
+msgstr "Download je %s"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:73
+msgid "locations CSV file."
+msgstr "locaties CSV bestand."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:74
+msgid "Uploading"
+msgstr "Uploaden"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:75
+msgid "Loading locations from "
+msgstr "Laad locaties van "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:76
+msgid "Finished loading "
+msgstr "Voltooid laden "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:100
+#, php-format
+msgid "CSV file imports are currently scheduled to run %s."
+msgstr "CSV bestand imports zijn momenteel gescheduled te draaien %s."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:103
+msgid "There are no scheduled imports."
+msgstr "Er zijn geen geplande imports."
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:144
+msgid "Recurring cron jobs."
+msgstr "Terugkerende cron-taken."
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:160
+msgid "Import CSV"
+msgstr "Importeer CSV"
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:171
+msgid "Yes"
+msgstr "Ja"
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:171
+msgid "No"
+msgstr "Nee"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:197
+msgid "File Settings"
+msgstr "Bestand Instellingen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:200
+msgid "These settings apply to both Upload CSV File and Remote File Retrieval."
+msgstr ""
+"Deze instellingen zijn van toepassing op zowel CSV-Bestand Uploaden als "
+"Extern Bestand Ophalen."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:208
+msgid "Skip Geocoding"
+msgstr "Skip Geocoding"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:209
+msgid ""
+"Do not check with the Geocoding service to get latitude/longitude.  "
+"Locations without a latitude/longitude will NOT appear on map base searches."
+msgstr ""
+"Check niet met de Geocoding service om de latitude/longitude te zetten. "
+"Locaties zonder latitude/longitude zullen NIET getoond worden op kaart "
+"gebaseerde zoekopdrachten."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:217
+msgid "Load Data"
+msgstr "Laad Data"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:218
+msgid "If checked use the faster MySQL Load Data method of file processing."
+msgstr ""
+"Als gezet gebruik dan de snellere MySQL Laad Data methode van bestand "
+"verwerking."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:219
+#, php-format
+msgid ""
+"Only base plugin data can be loaded, see the <a href=\"%s\">approved field "
+"name list</a>."
+msgstr ""
+"Alleen basis plugin data kan geladen worden, zie de <a href=\"%s\">lijst met "
+"toegestane veldnamen</a>."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:228
+msgid "Clear Messages"
+msgstr "Berichten Wissen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:229
+msgid "Clear import messages at the start of each new import."
+msgstr "Wis importberichten aan het begin van elke nieuwe import."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:237
+msgid "Duplicates Handling"
+msgstr "Duplicaten Behandeling"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:238
+msgid "How should duplicates be handled? "
+msgstr "Hoe zouden duplicaten behandeld moeten worden? "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:239
+msgid ""
+"Duplicates are records that match on name and complete address with country. "
+msgstr ""
+"Duplicaten zijn records die matchen op naam en compleet adres met land. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:240
+msgid "Add (default) will add new records when duplicates are encountered. "
+msgstr ""
+"Toevoegen (default) voegt een nieuw record toe als duplicaten gevonden zijn. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:241
+msgid "Skip will not process duplicate records. "
+msgstr "Overslaan zal de duplicaat records niet verwerken. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:242
+msgid "Update will update duplicate records. "
+msgstr "Bijwerken zal de duplicaat records bijwerken. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:243
+msgid ""
+"To update name and address fields the CSV must have the ID column with the "
+"ID of the existing location."
+msgstr ""
+"Om de naam en adres velden bij te werken, moet de CSV een ID kolom hebben "
+"met het ID van de bestaande locatie."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:245
+msgid "Add"
+msgstr "Toevoegen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:246
+msgid "Skip"
+msgstr "Overslaan"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:247
+msgid "Update"
+msgstr "Bijwerken"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:262
+msgid "Import Messages"
+msgstr "Importeren Berichten"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:276
+msgid "Clear import messages."
+msgstr "Importberichten wissen."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:294
+msgid "Remote File Retrieval"
+msgstr "Extern Bestand Ophalen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:305
+#, php-format
+msgid "The current WordPress time (GMT) is %s."
+msgstr "De huidige WordPress tijd (GMT) is %s."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:311
+msgid "CSV File URL"
+msgstr "CSV Bestand URL"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:312
+msgid "Enter a full URL for a CSV file you wish to import"
+msgstr "Geef een volledige URL naar het CSV bestand dat je wilt importeren"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:319
+msgid "Import Schedule"
+msgstr "Importschema"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:320
+msgid "How often to fetch the file from the URL. "
+msgstr "Hoe vaak het bestand van de URL op te halen. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:321
+msgid "None loads the remote file immediately with no background processing. "
+msgstr "Geen laadt het bestand meteen zonder achtergrond verwerking. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:322
+msgid "At loads the file one time on or after the time specified. "
+msgstr "Op laadt het bestand eenmalig op of na de opgegeven tijd. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:323
+msgid "Set to none and leave the URL blank to clear the cron job.  "
+msgstr "Zet op geen en laat de URL leeg om de cron job te verwijderen. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:326
+#: include/module/options/SLP_Power_Options.php:193
+msgid "None"
+msgstr "Geen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:327
+msgid "At"
+msgstr "Op"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:328
+msgid "Hourly"
+msgstr "Elk uur"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:329
+msgid "Twice Daily"
+msgstr "Twee Keer per Dag"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:330
+msgid "Daily"
+msgstr "Dagelijks"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:337
+msgid "Import Time"
+msgstr "Import Tijd"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:338
+msgid "What time to run the recurring import from this URL.  "
+msgstr "Op welke tijd de herhaalde import van deze URL moet plaatsvinden. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:339
+msgid ""
+"WordPress cron is not exact, it executes the next time a visitor comes to "
+"your site.  "
+msgstr ""
+"WordPress cron is niet precies, het wordt uitgevoerd zodra er een bezoeker "
+"op je site komt. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:340
+msgid "WordPress times are UTC/GMT time NOT local time.  "
+msgstr "WordPress tijden zijn UTC/GMT tijd NIET locale tijd. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:341
+msgid "PHP Date and Time formats"
+msgstr "PHP Datum en Tijd formaten"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:342
+msgid "are acceptable, such as \"now\" or \"14:00\" or \"sunday\""
+msgstr "zijn aanvaardbaar, zoals 'nu' of '14:00' of 'zondag'"
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:350
+msgid "Schedule Location Import"
+msgstr "Plannen Locatie Importeren"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:370
+msgid "Scheduled Activity"
+msgstr "Geplande Activiteit"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:387
+msgid "Upload A File"
+msgstr "Upload Een Bestand"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:397
+msgid "CSV files need a header row to define the columns. "
+msgstr ""
+"CSV-bestanden hebben een koptekstrij nodig om de kolommen te definiëren. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:398
+msgid "Files should be in UTF-8 format with comma delimiters. "
+msgstr "Bestanden moeten in UTF-8 formaat met komma scheidingen. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:400
+msgid "Imports are a 3-step process. "
+msgstr "Import is een proces in drie stappen. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:402
+msgid "1) The file is uploaded to the WP Media Library. "
+msgstr "1) Het bestand wordt geüpload naar de WP Media Library. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:404
+msgid "2) A background process reads the CSV into the locations list. "
+msgstr "2) Een achtergrond proces leest de CSV in de locaties lijst. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:405
+msgid ""
+"It may run this process multiple times on slow servers or with lists over "
+"2500 locations. "
+msgstr ""
+"Het kan dit proces meerdere keren uitvoeren op trage servers of met lijsten "
+"van meer dan 2500 locaties. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:407
+msgid ""
+"3) A background process geocodes the locations without a latitude or "
+"longitude. "
+msgstr ""
+"3) Een achtergrondproces geocodeert de locaties zonder een breedte- of "
+"lengtegraad. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:408
+msgid ""
+"It may run this process multiple times if the goecoding servers are slow or "
+"you have hit your daily limit on Google goecoding services. "
+msgstr ""
+"Het kan dit proces meerdere keren uitvoeren als de goecoding-servers traag "
+"zijn of als u uw dagelijkse limiet op Google goecoding-services hebt "
+"bereikt. "
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:411
+msgid ""
+"Importing a file twice before the first file is done processing can result "
+"in duplicate entries. "
+msgstr ""
+"Als u een bestand twee keer importeert voordat het eerste bestand verwerkt "
+"is, kan dit leiden tot dubbele vermeldingen. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:412
+msgid ""
+"You do not have to stay on this import page after the blue uploaded "
+"notification or the Import progress box appears. "
+msgstr ""
+"U hoeft niet op deze importpagina te blijven nadat de blauwe geüploade "
+"melding of het voortgangsvak Importeren is weergegeven. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:413
+msgid ""
+"Check progress by coming back to this page and checking messages at the "
+"bottom of this page or click on the CSV file in the media library. "
+msgstr ""
+"Controleer de voortgang door terug te komen naar deze pagina en berichten "
+"onder aan deze pagina te controleren of klik op het CSV-bestand in de "
+"mediabibliotheek. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:414
+msgid "Having issues with the import not doing what you expect? "
+msgstr "Problemen dat de import niet doet wat je verwacht? "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:415
+msgid ""
+"Excel likes to mangle CSV files; Try using Google Sheets to create and "
+"maintain your CSV files. "
+msgstr ""
+"Excel houdt ervan om CSV-bestanden te verminken; Probeer Google Sheets te "
+"gebruiken om uw CSV-bestanden te maken en te onderhouden. "
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:431
+msgid "You have reached the maximum locations allowed for your plan."
+msgstr "U hebt het maximaal toegestane aantal locaties voor uw plan bereikt."
+
+#: include/module/admin/SLP_Power_Admin_Locations_Import.php:442
+msgid "Select Your CSV File"
+msgstr "Selecteer uw CSV-bestand"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:30
+msgid " - Reporting"
+msgstr " - Rapporteren"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:32
+msgid "Save Settings"
+msgstr "Instellingen Opslaan"
+
+#: include/module/admin/SLP_Power_Admin_Reports.php:107
+msgid "Searches"
+msgstr "Zoekopdrachten"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:159
+msgid "Export To CSV"
+msgstr "Exporteer Naar CSV"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:168
+msgid "Export all records"
+msgstr "Exporteer alle records"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:172
+msgid "Top Searches"
+msgstr "Top Zoekopdrachten"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:173
+msgid "Top Results"
+msgstr "Top Resultaten"
+
+#: include/module/admin/SLP_Power_Admin_Reports.php:186
+msgid "Report Settings"
+msgstr "Rapport Instellingen"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:194
+msgid "Start Date"
+msgstr "Start Datum"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:200
+msgid "Only show data on or after this date.  YYYY-MM-DD."
+msgstr "Toon alleen data op of na deze datum.  YYYY-MM-DD."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:210
+msgid "End Date"
+msgstr "Eind Datum"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:216
+msgid "Only show data on or before this date.  YYYY-MM-DD hh:mm:ss."
+msgstr "Toon alleen data op of voor deze datum. YYYY-MM-DD hh:mm:ss."
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:227
+msgid "Report Limit"
+msgstr "Rapport Limiet"
+
+# @ slp-power
+#: include/module/admin/SLP_Power_Admin_Reports.php:233
+msgid ""
+"Limit the report to this many detail records.  Default: 10.  Recommended "
+"maximum: 500."
+msgstr ""
+"Beperkt het rapport tot zoveel detail records. Default: 10. Aanbevolen "
+"maximum: 500."
+
+#: include/module/admin/SLP_Power_Admin_Reports.php:250
+#, php-format
+msgid "Deleted %d report history records logged before %s."
+msgstr ""
+"Verwijderde %d rapportgeschiedenisrecords die vóór %s zijn geregistreerd."
+
+# @ slp-power
+#: include/module/ajax/SLP_Power_AJAX.php:270
+#: include/module/ajax/SLP_Power_AJAX.php:276
+msgid "Cheatin' huh!"
+msgstr "Valsspelen hè!"
+
+# @ slp-power
+#: include/module/ajax/SLP_Power_AJAX.php:550
+msgid "Creating the location export CSV file."
+msgstr "Maak het locatie export CSV bestand."
+
+#: include/module/ajax/SLP_Power_AJAX.php:583
+msgid "Processing complete."
+msgstr "Verwerking voltooid."
+
+#: include/module/ajax/SLP_Power_AJAX.php:583
+msgid "Being processed."
+msgstr "Wordt verwerkt."
+
+#: include/module/ajax/SLP_Power_AJAX.php:590
+msgid "Original Name:"
+msgstr "Oorspronkelijke Naam:"
+
+#: include/module/ajax/SLP_Power_AJAX.php:598
+msgid "Fields:"
+msgstr "Velden:"
+
+#: include/module/ajax/SLP_Power_AJAX.php:606
+#: include/module/ajax/SLP_Power_AJAX.php:640
+msgid "File Size:"
+msgstr "Bestandsgrootte:"
+
+#: include/module/ajax/SLP_Power_AJAX.php:614
+msgid "Next process time:"
+msgstr "Volgende verwerk tijd:"
+
+#: include/module/ajax/SLP_Power_AJAX.php:620
+msgid "Last Processed Record:"
+msgstr "Laatst Verwerkte Record:"
+
+#: include/module/ajax/SLP_Power_AJAX.php:626
+msgid "Reading Offset:"
+msgstr "Leesverschuiving:"
+
+#: include/module/ajax/SLP_Power_AJAX.php:632
+msgid "Records Loaded:"
+msgstr "Records Geladen:"
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Selector_Manager.php:38
+#: include/module/options/SLP_Power_Options.php:194
+msgid "Hidden"
+msgstr "Verborgen"
+
+#: include/module/category/SLP_Power_Category_Selector_Manager.php:46
+msgid "Single Drop Down"
+msgstr "Enkele Vervolgkeuzelijst"
+
+#: include/module/category/SLP_Power_Category_Selector_Manager.php:55
+msgid "Cascading Drop Down"
+msgstr "Trapsgewijze Vervolgkeuzelijst"
+
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:152
+msgid "Locations"
+msgstr "Locaties"
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:153
+#: include/module/text/SLP_Power_Text.php:77
+msgid "Rank"
+msgstr "Rang"
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:154
+msgid "Icon"
+msgstr "Icon"
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:155
+msgid "Marker"
+msgstr "Marker"
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:159
+#: include/module/pages/SLP_Power_Pages_Global.php:46
+#: include/module/pages/SLP_Power_Pages_Tab.php:23
+msgid "Pages"
+msgstr "Pagina's"
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:218
+msgid "Item "
+msgstr "Item "
+
+# @ slp-power
+#: include/module/category/SLP_Power_Category_Stores_Taxonomy.php:219
+msgid "Store category "
+msgstr "Store Categorie "
+
+# @ slp-power
+#: include/module/cron/SLP_Power_Cron.php:98
+#, php-format
+msgid "Scheduled a one-time import at %s (%s)."
+msgstr "Een eenmalige import gepland op %s (%s)."
+
+# @ slp-power
+#: include/module/cron/SLP_Power_Cron.php:100
+#, php-format
+msgid "Could not a one-time import at %s (%s)."
+msgstr "Kon geen eenmalige import op %s (%s)."
+
+#: include/module/cron/SLP_Power_Cron.php:146
+msgid "Scheduled"
+msgstr "Ingepland"
+
+#: include/module/cron/SLP_Power_Cron.php:146
+msgid "Could not schedule"
+msgstr "Kan niet inplannen"
+
+#: include/module/cron/SLP_Power_Cron.php:148
+#, php-format
+msgid "%s a recurring %s import of %s at %s."
+msgstr "%s een terugkerende %s import van %s op %s."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:143
+msgid " new locations added."
+msgstr " nieuwe locaties toegevoegd."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:144
+msgid " pre-existing locations skipped."
+msgstr " reeds bestaande locaties overgeslagen."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:145
+msgid " locations skipped due to missing or malformed CSV data."
+msgstr " locaties overgeslagen vanwege ontbrekende of misvormde CSV-gegevens."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:146
+msgid " locations did not need to be updated."
+msgstr " locaties hoefden niet te worden bijgewerkt."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:147
+msgid " locations were skipped due to duplicate address information."
+msgstr " locaties zijn overgeslagen vanwege dubbele adres informatie."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:148
+msgid " locations were updated."
+msgstr " locaties zijn bijgewerkt."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:239
+msgid "Could not fetch the remote file."
+msgstr "Kon het bestand niet ophalen."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:257
+msgid "Could not sideload the remote file into media library."
+msgstr "Kan het externe bestand niet in de mediabibliotheek laden."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:323
+msgid "Location import started."
+msgstr "Locatie import gestart."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:343
+msgid "CSV File Meta not set."
+msgstr "CSV File Meta niet ingesteld."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:354
+msgid "Import file name not set."
+msgstr "Importbestandsnaam niet ingesteld."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:366
+msgid "Import file exceeds the upload_max_filesize in php.ini."
+msgstr "Importbestand is groter dan het maximum ingesteld in php.ini."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:370
+msgid "Import file was only partially loaded."
+msgstr "Importbestand is slechts gedeeltelijk geladen."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:374
+msgid "Import file seems to have gone missing."
+msgstr "Importbestand lijkt te ontbreken."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:378
+msgid "Import file is empty."
+msgstr "Importbestand is leeg."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:392
+msgid "Uploaded file needs to be in CSV format."
+msgstr "Het geüploade bestand moet in CSV-indeling zijn."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:393
+#, php-format
+msgid "Type was %s."
+msgstr "Type was %s."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:526
+#, php-format
+msgid "WordPress upload directory %s is missing, check directory permissions."
+msgstr ""
+"WordPress upload directory %s ontbreekt, controleer directory machtigingen."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:557
+msgid "Imported CSV file could not be renamed."
+msgstr "Import CSV bestand kon niet worden hernoemd."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:558
+#, php-format
+msgid "Possibly out of disk space while trying to rename to %s"
+msgstr ""
+"Waarschijnlijk is de schijfruimte overschreden bij de poging om te hernoemen "
+"naar %s"
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:567
+msgid "Uploaded CSV file could not be moved."
+msgstr "Het geüploade CSV-bestand kan niet worden verplaatst."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:568
+#, php-format
+msgid "Check folder permissions for %s"
+msgstr "Check folderrechten voor %s"
+
+#: include/module/locations/SLP_Power_Locations_Import.php:586
+#, php-format
+msgid "You have reached your %s location limit."
+msgstr "U hebt uw %s locatie limiet bereikt."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:604
+#, php-format
+msgid "Could not open %s for import."
+msgstr "Kon %s niet openen voor import."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:624
+#, php-format
+msgid "Continuing import at position %d record %d."
+msgstr "Voortdurende import op positie %d record %d."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:632
+#, php-format
+msgid "Starting import of %s ."
+msgstr "Beginnen met import van %s ."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:633
+msgid "Your CSV file header is set to import the following fields: "
+msgstr ""
+"De CSV-bestandskoptekst is ingesteld om de volgende velden te importeren: "
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:671
+#, php-format
+msgid "Starting CSV import - duplicates %s ."
+msgstr "CSV-import starten - duplicaat %s ."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:690
+#, php-format
+msgid "Loading locations from %s "
+msgstr "Laden locaties vanuit %s "
+
+#: include/module/locations/SLP_Power_Locations_Import.php:704
+msgid "Reached maximum location limit. "
+msgstr "Bereikt maximale locatie limiet. "
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:717
+#, php-format
+msgid "%d data lines read from the CSV file."
+msgstr "%d gegevensregels gelezen uit het CSV-bestand."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:719
+msgid "Could not find any records to import."
+msgstr "Kan geen records vinden om te importeren."
+
+#: include/module/locations/SLP_Power_Locations_Import.php:720
+msgid "Make sure you imported a valid CSV format."
+msgstr "Zorg ervoor dat u een geldige CSV-indeling hebt geïmporteerd."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:744
+msgid "Finished CSV import."
+msgstr "Afgewerkte CSV-import."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:875
+msgid "Local copy of CSV file could not be created."
+msgstr "Lokale kopie van CSV-bestand kan niet worden gemaakt."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:879
+msgid "Starting the process of loading of the CSV file into the database."
+msgstr "Het proces starten van het laden van het CSV-bestand in de database."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:883
+msgid "CSV Import Process File."
+msgstr "CSV-procesbestand importeren."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:896
+msgid ""
+"The first line of your CSV file defines fields that do not match the data."
+msgstr ""
+"De eerste regel van uw CSV-bestand definieert velden die niet overeenkomen "
+"met de gegevens."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:897
+#, php-format
+msgid "At least one line had %d fields while the header defined %d."
+msgstr "Ten minste één regel had %d velden, terwijl de kop er %d had."
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:898
+msgid "Your header specified these fields: "
+msgstr "Uw koptekst gaf de volgende velden op: "
+
+#: include/module/locations/SLP_Power_Locations_Import.php:956
+#, php-format
+msgid "Your are importing %s fields.  That seems wrong. "
+msgstr "U importeert %s velden. Dat lijkt verkeerd. "
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:963
+msgid "Could not read CSV file header. "
+msgstr "Kan csv-bestandskoptekst niet lezen. "
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:964
+msgid "Is the file empty? "
+msgstr "Is het bestand leeg? "
+
+# @ slp-power
+#: include/module/locations/SLP_Power_Locations_Import.php:998
+#: include/module/locations/SLP_Power_Locations_Import.php:1010
+msgid "File url is blank."
+msgstr "De url van het bestand is leeg."
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:48
+msgid "Extended contact fields have been activated."
+msgstr "Uitgebreide contactvelden zijn geactiveerd."
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:80
+msgid "Enable Reporting"
+msgstr "Inschakelen Rapportage"
+
+#: include/module/options/SLP_Power_Options.php:81
+msgid "Enables tracking of searches and returned results for up to 13 months. "
+msgstr ""
+"Schakelt het bijhouden van zoekopdrachten en gevonden resultaten in tot 13 "
+"maanden terug. "
+
+#: include/module/options/SLP_Power_Options.php:82
+msgid ""
+"The added overhead can increase how long it takes to return location search "
+"results."
+msgstr ""
+"De extra overhead kan invloed hebben op hoe lang het duurt voordat de "
+"zoekresultaten getoond worden."
+
+#: include/module/options/SLP_Power_Options.php:86
+msgid "Delete Report Data Before"
+msgstr "Verwijderen Rapportgegevens Vóór"
+
+#: include/module/options/SLP_Power_Options.php:87
+msgid "Delete historical search records older than the date entered. "
+msgstr ""
+"Verwijder historische zoekrecords die ouder zijn dan de ingevoerde datum. "
+
+#: include/module/options/SLP_Power_Options.php:88
+msgid "Any SQL date will work, usually YYYY-MM-DD will suffice.  "
+msgstr "Elke SQL datum zal werken, meestal YYYY-MM-DD zal volstaan.  "
+
+#: include/module/options/SLP_Power_Options.php:89
+msgid "You can be as specific as YYYY-MM-DD hh:mm:ss.  "
+msgstr "U net zo specifiek zijn als YYYY-MM-DD hh:mm:ss.  "
+
+#: include/module/options/SLP_Power_Options.php:91
+msgid "Save settings to perform the record clean up. "
+msgstr "Sla instellingen op om het record op te ruimen. "
+
+#: include/module/options/SLP_Power_Options.php:92
+msgid "Up to 10,000 records can be deleted in one operation. "
+msgstr "In één bewerking kunnen maximaal 10.000 records worden verwijderd. "
+
+#: include/module/options/SLP_Power_Options.php:93
+msgid "Make sure your server is up to the task. "
+msgstr "Controleer of uw server de taak aankan. "
+
+#: include/module/options/SLP_Power_Options.php:95
+msgid ""
+"Default: blank (deletes history records older than 13 months on next search)"
+msgstr ""
+"Standaard: leeg (verwijdert geschiedenisrecords ouder dan 13 maanden bij "
+"volgende zoekopdracht)"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:130
+msgid "As Entered"
+msgstr "Zoals Ingevoerd"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:131
+msgid "Hide Tags"
+msgstr "Verberg Tags"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:132
+msgid "On Separate Lines"
+msgstr "Op Aparte Regels"
+
+#: include/module/options/SLP_Power_Options.php:162
+msgid "Any"
+msgstr "Elk"
+
+#: include/module/options/SLP_Power_Options.php:167
+msgid "Tag Selector"
+msgstr "Tag Selector"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:170
+msgid "Default Tag Selections"
+msgstr "Default Tag Selecties"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:172
+msgid ""
+"For Hidden or Text tag input enter a default value to be used in the field, "
+"if any. "
+msgstr ""
+"Geef een default waarde die gebruikt moet worden voor Verborgen of Tekst tag "
+"invoer, indien nodig. "
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:173
+msgid ""
+"For Drop Down tag input enter a comma (,) separated list of tags to show in "
+"the search pulldown, mark the default selection with parenthesis (). "
+msgstr ""
+"Geef een komma (,) gescheiden lijst met tags om in de zoek lijst te tonen "
+"voor de Drop Down tag invoer, markeer de default selectie met haakjes (). "
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:174
+msgid ""
+"This is a default setting that can be overriden on each page within the "
+"shortcode."
+msgstr ""
+"Dit is een default instelling die op iedere pagina kan worden vervangen "
+"binnen de shortcode."
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:179
+msgid "Tag Select All Text"
+msgstr "Tekst voor optie  \"Alles selecteren\""
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:180
+msgid "What should the \"any\" tag say? "
+msgstr "Wat moet de \"elke\" tag zijn? "
+
+#: include/module/options/SLP_Power_Options.php:181
+msgid "The first entry on the search by tag pulldown. "
+msgstr "De eerste keuze van de zoek op tag pulldown. "
+
+#: include/module/options/SLP_Power_Options.php:182
+msgid ""
+"If this is left blank there will be no option to \"select all locations "
+"regardless of tag\" (aka select any) option. "
+msgstr ""
+"Als dit leeg is, is er geen optie om \"alle locaties te selecteren, ongeacht "
+"de tag\" (ook wel een willekeurige optie selecteren). "
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:189
+msgid "Search Form Tag Input"
+msgstr "Zoek Formulier Tag Invoer"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:190
+msgid ""
+"Select the type of tag input that you would like to see on the search form."
+msgstr ""
+"Selecteer het type tag invoer dat je op het zoekformulier zou willen zien."
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:195
+msgid "Drop Down"
+msgstr "Drop Down"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:196
+msgid "Radio Button"
+msgstr "Radio Button"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:197
+msgid "Text Input"
+msgstr "Tekst Invoer"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:204
+msgid "Tag Autosubmit"
+msgstr "Tag Automatische Invoer"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:205
+msgid ""
+"Force the form to auto-submit when the tag is selected with a radio button."
+msgstr ""
+"Forceer het formulier automatisch te versturen als de tag is geselecteerd "
+"met een radio button."
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:221
+msgid "Tags Label"
+msgstr "Tags Label"
+
+# @ slp-power
+#: include/module/options/SLP_Power_Options.php:222
+msgid "Search form label to prefix the tag selector."
+msgstr "Zoekformulier label prefix voor de tag selectie."
+
+#: include/module/pages/SLP_Power_Pages_Admin.php:35
+msgid "Create SEO Page"
+msgstr "Maak SEO Pagina Aan"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:194
+msgid "Description"
+msgstr "Omschrijving"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:196
+msgid "Contact Info"
+msgstr "Contact Informatie"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:256
+msgid "Pages, Create"
+msgstr "Pagina's, Maken"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:260
+msgid "Pages, Delete Permanently"
+msgstr "Pagina's, Permanent Verwijderen"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:274
+msgid "Pages URL"
+msgstr "Pagina's URL"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:311
+#: include/module/pages/SLP_Power_Pages_Admin.php:394
+msgid "Edit"
+msgstr "Bewerken"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:321
+#, php-format
+msgid "Store Page ID %d is at "
+msgstr "Store Page ID %d is op "
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:383
+msgid "Recreate"
+msgstr "Herbouw"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:406
+msgid "Trash"
+msgstr "In Prullenbak"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:419
+msgid "Delete"
+msgstr "Verwijderen"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:437
+msgid "View"
+msgstr "Bekijken"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Admin.php:452
+msgid "Preview"
+msgstr "Voorbeeld"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:44
+msgid "Settings"
+msgstr "Instellingen"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:49
+msgid "Behavior"
+msgstr "Gedrag"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:54
+msgid "Default Page Status"
+msgstr "Standaard Pagina Status"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:59
+msgid "Draft"
+msgstr "Concept"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:64
+msgid "Published"
+msgstr "Gepubliceerd"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:69
+msgid "Pending Review"
+msgstr "Wachtend op Beoordeling"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:74
+msgid "Future"
+msgstr "Toekomstig"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:79
+msgid "Private"
+msgstr "Privé"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:85
+msgid "When creating new Store Pages, what should the default status be?."
+msgstr ""
+"Als een nieuwe Store Pagina wordt aangemaakt, wat moet dan de standaard "
+"status zijn?."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:86
+msgid "Default mode is draft."
+msgstr "Standaard mode is concept."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:93
+msgid "Pages Replace Websites"
+msgstr "Pagina's Vervangen Websites"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:95
+msgid ""
+"Use the Store Pages local URL in place of the website URL on the map results "
+"list."
+msgstr ""
+"Gebruik de locale Store Pages URL ipv de website's URL in de map resultaten "
+"lijst."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:103
+msgid "Prevent New Window"
+msgstr "Voorkom Nieuw Venster"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:105
+msgid "Prevent Store Pages web links from opening in a new window."
+msgstr "Voorkom dat Store Pages web links in een nieuw venster openen."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:113
+msgid "Prepend URL With Blog Path"
+msgstr "Voeg Blog Pad Vooraan URL Toe"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:115
+msgid ""
+"If checked the page URL will be prepended with the standard blog path. "
+"Example: if your permalink structure is /blog/, then your links will be /"
+"blog/store-page. If this is unchecked it will be /store-page."
+msgstr ""
+"Als de pagina-URL is aangevinkt, wordt deze voorbereid met het standaard "
+"blogpad. Voorbeeld: als uw permalinkstructuur /blog/ is, dan zullen uw "
+"verbindingen /blog/winkel-pagina zijn. Als dit is uitgeschakeld zal het /"
+"store-pagina worden."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:125
+msgid "Permalink Starts With"
+msgstr "Permalink Begint Met"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:128
+msgid ""
+"This process takes a long time to update WordPress fils and ALL of your "
+"location data."
+msgstr ""
+"Dit proces duurt lang om WordPress-bestanden en al uw locatie gegevens bij "
+"te werken."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:129
+msgid "Set the middle part of the store page URLs, defaults to \"store_page\"."
+msgstr ""
+"Geef het tussendeel voor de store pagina URLs, defaults naar \"store_page\"."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:131
+#, php-format
+msgid ""
+"<a href=\"%s\">Permalinks</a> needs to be set to something other than "
+"default."
+msgstr ""
+"<a href=\"%s\">Permalinks</a> moet iets anders zijn dan de default "
+"instelling."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:140
+msgid "Initial Page Features"
+msgstr "Initiële Pagina Eigenschappen"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:152
+#, php-format
+msgid "These settings determine how your custom %s pages are built. "
+msgstr ""
+"Deze instellingen bepalen hoe je persoonlijke %s pagina's opgebouwd zijn. "
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:156
+msgid "You have Force Load JavaScript ON. "
+msgstr "Je hebt Forceer Laden JavaScript AAN. "
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:157
+msgid ""
+"Themes that follow WordPress best practices and employ wp_footer() properly "
+"do not need this. "
+msgstr ""
+"Themes die de WordPress best practices volgen en wp_footer() correct "
+"gebruiken hebben dit niet nodig. "
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:158
+msgid ""
+"Leaving it on slows down your site and disables a lot of extra features with "
+"the plugin and add-on packs. "
+msgstr ""
+"Aan laten vertraagt je site en schakelt een boel extra eigenschappen uit van "
+"de plugin en add-on pakketten. "
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:162
+msgid ""
+"For example, your Store Pages template has had the map element removed. "
+msgstr ""
+"Bijvoorbeeld, je Store Pages template heeft het kaart element verwijderd. "
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:172
+msgid "Default Comments"
+msgstr "Default Reacties"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:175
+msgid ""
+"Should comments be on or off by default when a new store page is created?"
+msgstr ""
+"Moeten reacties standaard aan of uit zijn als een nieuwe store pagina wordt "
+"aangemaakt?"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:182
+msgid "Default Trackbacks"
+msgstr "Default Trackbacks"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:185
+msgid ""
+"Should pingbacks/trackbacks be on or off by default when a new store page is "
+"created?"
+msgstr ""
+"Moeten pingbakcs/trackbacks standaard aan of uit zijn als een nieuwe store "
+"pagina wordt aangemaakt?"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:196
+msgid "Page Template"
+msgstr "Pagina Template"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:200
+msgid "The HTML that is used to create new store pages."
+msgstr "De HTML die gebruikt wordt om een nieuwe store pagina aan te maken."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:201
+msgid "Leave blank to reset to default layout."
+msgstr "Maak het veld leeg om te resetten naar de standaard layout."
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:209
+msgid "Read More Text"
+msgstr "Lees Meer Tekst"
+
+# @ slp-power
+#: include/module/pages/SLP_Power_Pages_Tab.php:211
+msgid "Read more text to be used with [slp_pages] <!--more--> page breaks."
+msgstr ""
+"Lees meer tekst die moet worden gebruikt met [slp_pages] <!--meer-- > pagina-"
+"einden."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:45
+msgid ""
+"When enabled the results will be ordered by those with the most categories "
+"assigned appearing first."
+msgstr ""
+"Als aangezet worden de resultaten gesorteerd op het aantal toegekende "
+"categorieën, de meeste eerst."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:46
+msgid "The URL where you want the icon to be linked."
+msgstr "De URL waar je het icon gelinkt wilt hebben."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:47
+msgid ""
+"Do not use custom category destination markers on map, use default Map "
+"Settings markers."
+msgstr ""
+"Gebruik geen aangepaste categoriebestemmingsmarkeringen op de kaart, gebruik "
+"standaard markeringen voor kaartinstellingen."
+
+#: include/module/text/SLP_Power_Text.php:48
+msgid ""
+"Hide the empty categories from the category selector. Location Pages in "
+"draft mode are considered \"empty\"."
+msgstr ""
+"De lege categorieën verbergen in de categorie selector. Locatie Pagina's in "
+"conceptmodus worden als 'leeg' beschouwd."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:49
+msgid "The label for the category selector."
+msgstr "Het label voor de categorie selector."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:50
+msgid "This is the graphic used as the map marker on the map."
+msgstr "Dit is de afbeelding die gebruikt wordt als kaart marker op de kaart."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:51
+msgid ""
+"This graphic appears as the icon or icon array in the result listing or map "
+"info bubble."
+msgstr ""
+"Deze afbeelding verschijnt als het icon of icon array in het resultaten "
+"overzicht of kaart info ballon."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:52
+msgid ""
+"Rank for category (1, 2, 3...) lower numbers have higher precedence for map "
+"markers."
+msgstr ""
+"Rang voor categorie (1, 2, 3, ...) lagere nummers hebben hogere voorkeur "
+"voor kaart markers."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:53
+msgid "How to show the category selector on the search form."
+msgstr "Hoe de categorie selector op het zoekformulier te tonen."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:54
+msgid "No will not show the category selector."
+msgstr "Nee toont de categorie selector niet."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:55
+msgid ""
+"Single shows the category selector as a single drop down with indents if "
+"there are parent/children relations."
+msgstr ""
+"Enkelvoudig toont de categorie selector als een eenvoudige drop down met "
+"inspringen als er vader/kind relaties zijn."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:56
+msgid ""
+"Cascading shows a single drop down showing parents then children drop downs "
+"on an as-needed basis."
+msgstr ""
+"Cascade toont een eenvoudige drop down voor de vaders en aparte drop downs "
+"voor de kinderen indien nodig."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:57
+msgid ""
+"When enabled an array of icons will be created in the below map results and "
+"info bubble."
+msgstr ""
+"Als aangezet wordt een array van iconen aangemaakt in de resultaten onder de "
+"kaart en in de info ballon."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:58
+msgid "When enabled text will appear under each category icon in the legend. "
+msgstr ""
+"Wanneer ingeschakeld wordt tekst weergegeven onder elk categorie icon in de "
+"legenda. "
+
+#: include/module/text/SLP_Power_Text.php:59
+msgid ""
+"Add a category legend to the output with the [slp_category legend] shortcode "
+"under Settings / View / Layout."
+msgstr ""
+"Voeg een categorielegenda toe aan de uitvoer met de korte code [slp_category "
+"legend] onder Instellingen / Weergave / Indeling."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:61
+msgid ""
+"If set, prepends this text to select \"any category\" as an option to the "
+"selector. Set to blank to not provide the any selection."
+msgstr ""
+"Als gezet, wordt deze tekst gebruikt om \"any category\" te selecteren als "
+"optie in de selector. Maak leeg om geen any selectie te geven."
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:62
+msgid ""
+"How should tags be output in the results below the map and the info bubble?"
+msgstr ""
+"Hoe moeten tags worden getoond in de resultaten onder de kaart en de info "
+"ballon?"
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:63
+msgid ""
+"Target window for the URL (_blank = new window/tab, _self = same window/tab, "
+"csa = window/tab named \"csa\")."
+msgstr ""
+"Doel window voor the URL (_blank = nieuw window/tab, _self = zelfde window/"
+"tab, csa = window/tab genaamd \"csa\")."
+
+#: include/module/text/SLP_Power_Text.php:65
+msgid "Click to auto-refresh."
+msgstr "Klik hier om automatisch te vernieuwen."
+
+#: include/module/text/SLP_Power_Text.php:67
+msgid "Category URL"
+msgstr "Categorie URL"
+
+#: include/module/text/SLP_Power_Text.php:68
+msgid "Download"
+msgstr "Download"
+
+#: include/module/text/SLP_Power_Text.php:69
+msgid "Geocoding"
+msgstr "Geocoding"
+
+#: include/module/text/SLP_Power_Text.php:70
+msgid "Locations will be geocoded after they are imported."
+msgstr "Locaties worden geocoded nadat ze zijn geïmporteerd."
+
+#: include/module/text/SLP_Power_Text.php:71
+msgid "Locations are still being geocoded."
+msgstr "Locaties worden nog steeds geocoded."
+
+#: include/module/text/SLP_Power_Text.php:72
+msgid "Geocoding Location ID"
+msgstr "Geocoderingslocatie-id"
+
+#: include/module/text/SLP_Power_Text.php:73
+msgid "Imports"
+msgstr "Imports"
+
+#: include/module/text/SLP_Power_Text.php:74
+msgid "Imported"
+msgstr "Geïmporteerd"
+
+#: include/module/text/SLP_Power_Text.php:75
+msgid "Importing: "
+msgstr "Importeren: "
+
+#: include/module/text/SLP_Power_Text.php:76
+msgid "Locations are being loaded from the CSV file."
+msgstr "Locaties worden geladen vanuit het CSV-bestand."
+
+#: include/module/text/SLP_Power_Text.php:78
+msgid "Medium Icon"
+msgstr "Pictogram Medium"
+
+#: include/module/text/SLP_Power_Text.php:79
+msgid "There are no location imports running."
+msgstr "Er wordt geen locatieimport uitgevoerd."
+
+#: include/module/text/SLP_Power_Text.php:80
+msgid "Geocoding of locations has finished."
+msgstr "Geocoding van locaties is voltooid."
+
+#: include/module/text/SLP_Power_Text.php:81
+msgid "Processing"
+msgstr "Verwerkend"
+
+#: include/module/text/SLP_Power_Text.php:82
+msgid "Reading Line"
+msgstr "Lezen Regel"
+
+#: include/module/text/SLP_Power_Text.php:83
+msgid "Store Locator Plus® Settings"
+msgstr "Store Locator Plus® Instellingen"
+
+#: include/module/text/SLP_Power_Text.php:84
+msgid "URL Target"
+msgstr "URL Doel"
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:86
+msgid "Order By Category Count"
+msgstr "Sorteer Op Categorie Aantal"
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:87
+msgid "CSV Imports"
+msgstr "CSV Imports"
+
+#: include/module/text/SLP_Power_Text.php:88
+msgid "Do Not Use Category Markers"
+msgstr "Gebruik Geen Categorie Markers"
+
+#: include/module/text/SLP_Power_Text.php:89
+msgid "Category Selector Label"
+msgstr "Categorie Selector Label"
+
+#: include/module/text/SLP_Power_Text.php:90
+msgid "Hide Empty Categories"
+msgstr "Verberg Lege Categorieën"
+
+#: include/module/text/SLP_Power_Text.php:91
+#: include/module/text/SLP_Power_Text.php:96
+#: include/module/text/SLP_Power_Text.php:97
+msgid "Category Selector"
+msgstr "Categorie Selector"
+
+#: include/module/text/SLP_Power_Text.php:92
+msgid "Show Category Icons"
+msgstr "Toon Categorie Icons"
+
+#: include/module/text/SLP_Power_Text.php:93
+msgid "Add Text To Category Legend"
+msgstr "Voeg Tekst Toe Aan Categorie Legenda"
+
+#: include/module/text/SLP_Power_Text.php:94
+msgid "Category Selector First Entry"
+msgstr "Categorie Categorie Selector Eerste Optie"
+
+# @ slp-power
+#: include/module/text/SLP_Power_Text.php:99
+msgid "Show Tags In Output"
+msgstr "Toon Tags In Output"
+
+# @ slp-power
+#~ msgid "https://www.storelocatorplus.com"
+#~ msgstr "https://www.storelocatorplus.com"
+
+# @ slp-power
+#, php-format
+#~ msgid "%s requires WordPress %s to function properly. "
+#~ msgstr "%s heeft WordPress %s nodig om goed te functioneren. "
+
+# @ slp-power
+#~ msgid "Please upgrade WordPress."
+#~ msgstr "Upgrade WordPress aub."
+
+# @ slp-power
+#~ msgid "Appearance"
+#~ msgstr "Uiterlijk"
+
+# @ slp-power
+#~ msgid "Search Features"
+#~ msgstr "Zoek Eigenschappen"
+
+# @ slp-power
+#~ msgid "Search Labels"
+#~ msgstr "Zoek Labels"
+
+# @ slp-power
+#~ msgid "Store Locator Plus"
+#~ msgstr "Store Locator Plus"
+
+# @ slp-power
+#~ msgid ""
+#~ "Add an \"any\" selection on the tag drop down list thus allowing the user "
+#~ "to show all locations in the area, not just those matching a selected tag."
+#~ msgstr ""
+#~ "Voeg een \"elke\" selectie toe aan de tag drop down lijst om de gebruiker "
+#~ "de mogelijkheid te bieden alle locaties in het gebied te tonen, niet "
+#~ "alleen die die matchen met een geselecteerde tag."
+
+# @ slp-power
+#~ msgid "The first entry on the search by tag pulldown."
+#~ msgstr "De eerste keuze van de zoek op tag pulldown."
+
+# @ slp-power
+#~ msgid "Highlight the uncoded locations in the Manage Locations panel."
+#~ msgstr "Highlight de niet-gecodeerde locaties in het Beheer Locaties panel."
+
+# @ slp-power
+#~ msgid "Use location sensor"
+#~ msgstr "Gebruik locatie sensor"
+
+# @ slp-power
+#~ msgid ""
+#~ "This can be slow to load and customers are prompted whether or not to "
+#~ "allow location sensing."
+#~ msgstr ""
+#~ "Dit kan het laden vertragen en bezoekers wordt gevraagd al dan niet het "
+#~ "gebruik van de locatie sensor toe te staan."
+
+# @ slp-power
+#~ msgid ""
+#~ "Chart will be available after a Store Locator Plus search has been "
+#~ "performed."
+#~ msgstr ""
+#~ "Grafiek is pas beschikbaar nadat een Store Locator Plus zoekopdracht is "
+#~ "uitgevoerd."
+
+# @ slp-power
+#~ msgid "Report Summary"
+#~ msgstr "Rapporteer Samenvatting"
+
+# @ slp-power
+#~ msgid "Report Parameters"
+#~ msgstr "Rapport Parameters"
+
+# @ slp-power
+#, php-format
+#~ msgid "Total searches: <strong>%s</strong>"
+#~ msgstr "Totaal zoekopdrachten: <strong>%s</strong> "
+
+# @ slp-power
+#, php-format
+#~ msgid "Total results: <strong>%s</strong>"
+#~ msgstr "Totaal resultaten: <strong>%s</strong> "
+
+# @ slp-power
+#, php-format
+#~ msgid "Days with activity: <strong>%s</strong>"
+#~ msgstr "Dagen met activiteit: <strong>%s</strong>"
+
+# @ slp-power
+#, php-format
+#~ msgid "Top %s Results Returned"
+#~ msgstr "Top %s Resultaten Getoond"
+
+# @ slp-power
+#~ msgid "Store"
+#~ msgstr "Store"
+
+# @ slp-power
+#~ msgid "topresults"
+#~ msgstr "topresultaten"
+
+# @ slp-power
+#, php-format
+#~ msgid "Top %s Addresses Searched"
+#~ msgstr "Top %s Adressen Gezocht"
+
+# @ slp-power
+#~ msgid "topsearches"
+#~ msgstr "topzoekopdrachten"
+
+# @ slp-power
+#~ msgid "Enable reporting to start recording location search data. "
+#~ msgstr "Schakel rapportage in om te starten met locatie zoek data opslaan. "
+
+# @ slp-power
+#~ msgid "Once enabled the report section will appear on this tab."
+#~ msgstr "Eenmaal aangezet verschijnt de rapportage sectie op deze tab."
+
+# @ slp-power
+#~ msgid ""
+#~ "Enables tracking of searches and returned results.  The added overhead "
+#~ "can increase how long it takes to return location search results."
+#~ msgstr ""
+#~ "Schakelt het bijhouden van zoekopdrachten en gevonden resultaten in. De "
+#~ "extra overhead kan invloed hebben op hoe lang het duurt voordat de "
+#~ "zoekresultaten getoond worden."
+
+# @ slp-power
+#, php-format
+#~ msgid "Action %s is unsupported"
+#~ msgstr "Actie %s is niet ondersteund"
+
+# @ slp-power
+#~ msgid "Import Locations"
+#~ msgstr "Import Locaties"
+
+# @ slp-power
+#~ msgid " locations skipped due to malformed CSV data."
+#~ msgstr "locaties overgslagen vanwege onjuist geformatteerde CSV data."
+
+# @ slp-power
+#~ msgid "Map"
+#~ msgstr "Kaart"
