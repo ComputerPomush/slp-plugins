@@ -1,0 +1,18 @@
+.react-wrapper nav {
+  padding: 0 0 0 1em; }
+.react-wrapper .card {
+  padding: inherit;
+  min-width: inherit;
+  max-width: inherit; }
+.react-wrapper input[type=color], .react-wrapper input[type=date], .react-wrapper input[type=datetime-local], .react-wrapper input[type=datetime], .react-wrapper input[type=email], .react-wrapper input[type=month], .react-wrapper input[type=number], .react-wrapper input[type=password], .react-wrapper input[type=search], .react-wrapper input[type=tel], .react-wrapper input[type=text], .react-wrapper input[type=time], .react-wrapper input[type=url], .react-wrapper input[type=week], .react-wrapper select, .react-wrapper textarea {
+  box-shadow: inherit;
+  border-radius: inherit;
+  border: inherit;
+  background-color: inherit;
+  color: inherit;
+  line-height: inherit; }
+
+div[role=dialog].MuiPopperUnstyled-root {
+  z-index: 9990; }
+
+/*# sourceMappingURL=admin-react.css.map */
