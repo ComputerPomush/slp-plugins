@@ -1,0 +1,17 @@
+/** slp-experience/css/include/_ui_dialog_content.scss **/
+
+.ui-dialog-content {
+    fieldset {
+        border: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+
+        & > * {
+            flex: 1 100%;
+            padding: 0.25em;
+            margin-bottom: 0.25em;
+        }
+    }
+}
