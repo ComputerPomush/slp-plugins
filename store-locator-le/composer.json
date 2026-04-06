@@ -1,0 +1,22 @@
+{
+	"name": "csa/store-locator-le",
+	"description": "Store Locator Plus®",
+	"minimum-stability": "stable",
+	"license": "proprietary",
+	"authors": [
+		{
+			"name": "lancecleveland",
+			"email": "lance@charlestonsw.com"
+		},
+		{
+			"name": "brianliotti",
+			"email": "brian@liotti.io"
+		}
+	],
+	"require": {
+		"squizlabs/php_codesniffer": "^3.6.2"
+	},
+	"scripts": {
+		"phpcs": "phpcs --standard=./phpcs.xml"
+	}
+}
