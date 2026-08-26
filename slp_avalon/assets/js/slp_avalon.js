@@ -373,6 +373,10 @@
     // });
   }
   function enable_on_mouse_hover_for_markers() {
+    // Delegated so the handler survives SLP replacing the results markup on
+    // every search. Namespaced and cleared first: without the .off() these
+    // accumulate on document, one generation per search, and all of them fire.
+    jQuery(document).off("mouseenter.avalonHover");
     for (let i in avalon_cslmap.markers) {
       let marker = avalon_cslmap.markers[i];
       marker.__gmarker.addListener("mouseover", function () {
@@ -384,9 +388,9 @@
         });
       });
       //Also add on mouse hover for the sidebar list
-      jQuery("#slp_results_wrapper_" + markers_list_natural[i].id).on(
-        "mouseover",
-        null,
+      jQuery(document).on(
+        "mouseenter.avalonHover",
+        "#slp_results_wrapper_" + markers_list_natural[i].id,
         {
           info: markers_list_natural[i],
           marker: marker,

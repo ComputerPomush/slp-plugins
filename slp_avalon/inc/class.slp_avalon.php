@@ -105,7 +105,6 @@ if (!class_exists('SLP_Avalon')){
             // Styles
             // wp_enqueue_style('bootstrap-5', 'https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css', false);
             // wp_enqueue_style('bootstrap-5-grid', 'https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.0.1/css/bootstrap-grid.min.css', false);
-            // wp_enqueue_style('wpbf-style-child', WPBF_CHILD_THEME_URI . '/style.css', false, WPBF_CHILD_VERSION);
 
             // Scripts (uncomment if needed!)
             // wp_enqueue_script('bootstrap-5', 'https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.min.js', array('jquery'));
@@ -116,7 +115,6 @@ if (!class_exists('SLP_Avalon')){
                 self::file_version('assets/js/slp_avalon.js'),
                 true  // Load in footer — best practice
             );
-            //wp_enqueue_script('wpbf-store-page', WPBF_CHILD_THEME_URI . "/js/store-page.js", array('jquery'), WPBF_CHILD_VERSION, true);
             $google_maps_api_url = $this->splus_get_google_maps_url();
             //Deque old js url
             wp_dequeue_script('google_maps');
