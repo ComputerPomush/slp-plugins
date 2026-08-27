@@ -19,12 +19,13 @@ if (!class_exists('SLP_Avalon')){
             return self::$instance;
         }
 
+        // 2026-08-26 Phase 0.6 - DESTINATION CHANGED ONLY.
+        // Previously appended to slp_avalon/error.log, which WP Engine serves
+        // publicly (confirmed HTTP 200). error_log() goes to WP Engine's PHP
+        // error log, outside the web root.
         private static function log($error)
         {
-            $log_file = dirname(__FILE__) . "/../error.log";
-            $time = date("j-F-Y g:i:s T");
-            $title = "SLP Avalon Error";
-            file_put_contents($log_file, "[{$time}] {$title} : " . print_r($error, true) . PHP_EOL, FILE_APPEND);
+            error_log("SLP Avalon : " . print_r($error, true));
         }
 
         public static function init(){
@@ -737,7 +738,6 @@ if (!class_exists('SLP_Avalon')){
         public function admin_head()
         {
             $current_screen = get_current_screen();
-            self::log($current_screen->base);
             if ($current_screen->base === 'store-locator-plus_page_slp_manage_locations') {
                 $ajax_url = admin_url('admin-ajax.php');
                 $ajax_nonce = wp_create_nonce('avalon_import_ajax_nonce');
