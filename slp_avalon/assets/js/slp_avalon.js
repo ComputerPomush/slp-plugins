@@ -113,6 +113,8 @@
     user_initiated: false,
     original_geocode_response: null,
     original_send_ajax: null,
+    layout_normalized: false,
+    sidebar_default: null,
 
     is_busy: function () {
       return (
@@ -177,9 +179,14 @@
       }
       this.pending_url = null;
 
-      if (options.sidebar) {
-        this.set_sidebar(options.sidebar);
-      }
+      //REJECTED is unreachable until Step 2 but is wired here so the Layer 1
+      //and Layer 3 rejections inherit this presentation for free.
+      this.set_no_results(
+        terminal_state === this.ERROR ||
+          terminal_state === this.TIMEOUT ||
+          terminal_state === this.EMPTY ||
+          terminal_state === this.REJECTED
+      );
       if (options.message) {
         this.notify(options.message);
       }
@@ -251,7 +258,7 @@
           jQuery(
             "<style class='avalon_search_notification_css'>" +
               ".avalon_search_notification{color:#c00;font-size:13px;" +
-              "display:block;margin-top:6px;line-height:1.35;}" +
+              "display:block;margin:0 0 8px;line-height:1.35;}" +
               "</style>"
           )
         );
@@ -266,9 +273,16 @@
         $existing.text(message);
         return;
       }
-      jQuery("<span class='avalon_search_notification'></span>")
-        .text(message)
-        .insertAfter("#addressInput");
+      var $notification = jQuery(
+        "<span class='avalon_search_notification' role='alert'></span>"
+      ).text(message);
+      //Above the field, outside #addy_in_address: Google's .pac-container
+      //renders directly below #addressInput and was covering this.
+      if (jQuery("#addy_in_address").length > 0) {
+        $notification.insertBefore("#addy_in_address");
+      } else {
+        $notification.insertAfter("#addressInput");
+      }
     },
 
     clear_notification: function () {
@@ -276,17 +290,58 @@
     },
 
     /**
-     * Replace the sidebar rather than letting SLP write into it. Its failure
-     * branch injects the raw Google API error plus a link to the plugin
-     * vendor's competing SaaS product into a customer-facing panel. That text
-     * has always been generated; it was simply hidden behind the hung
-     * spinner, and would become visible the moment the spinner was fixed.
+     * Snapshot the sidebar's neutral prompt before any search has run, so a
+     * failed search can restore it instead of leaving stale results behind.
+     * Captured from the page rather than hardcoded, so the three sites keep
+     * their own wording.
      */
-    set_sidebar: function (message) {
+    capture_sidebar_default: function () {
+      if (this.sidebar_default !== null) return;
       var sidebar = document.getElementById("map_sidebar");
       if (sidebar) {
-        sidebar.textContent = message;
+        this.sidebar_default = sidebar.innerHTML;
       }
+    },
+
+    /**
+     * No-results presentation.
+     *
+     * Desktop keeps the results panel, reset to that neutral prompt - the
+     * message is already under the field, so repeating it there is redundant,
+     * and leaving the previous search's results would contradict a map whose
+     * markers we just cleared.
+     *
+     * Stacked layouts hide the column outright (CSS, <=768px): #results_box
+     * carries a hard height:670px, so an empty panel is dead space under the
+     * map rather than beside it.
+     *
+     * This also keeps SLP's own failure text out of view. Its else branch
+     * injects the raw Google API error plus a link to the plugin vendor's
+     * competing SaaS product into that panel.
+     */
+    set_no_results: function (on) {
+      jQuery("#sl_div").toggleClass("avalon_no_results", !!on);
+      if (!on) return;
+      var sidebar = document.getElementById("map_sidebar");
+      if (sidebar && this.sidebar_default !== null) {
+        sidebar.innerHTML = this.sidebar_default;
+      }
+    },
+
+    /**
+     * "Get My Position" sits below the field in SLP's markup, where the Places
+     * autocomplete dropdown covers it. Moved once, at map-ready. The submit
+     * button is re-anchored to the bottom of #address_search in style.css so
+     * it stays over the field rather than over this link.
+     */
+    normalize_search_layout: function () {
+      if (this.layout_normalized) return;
+      var $link = jQuery("#get_my_position");
+      var $wrapper = jQuery("#addy_in_address");
+      if ($link.length > 0 && $wrapper.length > 0) {
+        $link.insertBefore($wrapper);
+      }
+      this.layout_normalized = true;
     },
 
     focus_input: function () {
@@ -341,7 +396,6 @@
 
         guard.finish(guard.ERROR, {
           message: AVALON_GUARD_MESSAGES.geocode_failed,
-          sidebar: AVALON_GUARD_MESSAGES.geocode_failed,
           focus_input: guard.user_initiated,
         });
       };
@@ -375,7 +429,6 @@
             if (guard.state !== guard.SEARCHING) return;
             guard.finish(guard.ERROR, {
               message: AVALON_GUARD_MESSAGES.transport,
-              sidebar: AVALON_GUARD_MESSAGES.transport,
               focus_input: guard.user_initiated,
             });
           });
@@ -635,6 +688,9 @@
       //Issue 1 Path B. slp.run has already executed by map-ready, so
       //slp.send_ajax is defined and safe to replace here.
       avalon_guard.install_transport_hook();
+      //Presentation: runs before the first search response lands.
+      avalon_guard.capture_sidebar_default();
+      avalon_guard.normalize_search_layout();
     });
     initialize_autocomplete();
     //Set map options
@@ -672,6 +728,9 @@
     //Handed to the Guard so on_search_processed() can tell RESULTS from
     //EMPTY. Step 2 reads avalon_territory_rejected off the same payload.
     avalon_guard.last_response = response;
+    if (response && parseInt(response.count, 10) > 0) {
+      avalon_guard.set_no_results(false);
+    }
     let map = avalon_cslmap.gmap;
     let valid_response =
       typeof response.response !== "undefined" && response.success;
