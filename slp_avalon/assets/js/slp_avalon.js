@@ -258,7 +258,8 @@
           jQuery(
             "<style class='avalon_search_notification_css'>" +
               ".avalon_search_notification{color:#c00;font-size:13px;" +
-              "display:block;margin:0 0 8px;line-height:1.35;}" +
+              "display:block;margin:0 0 8px;padding-top:30px;" +
+              "line-height:1.35;}" +
               "</style>"
           )
         );
@@ -298,9 +299,14 @@
     capture_sidebar_default: function () {
       if (this.sidebar_default !== null) return;
       var sidebar = document.getElementById("map_sidebar");
-      if (sidebar) {
-        this.sidebar_default = sidebar.innerHTML;
-      }
+      if (!sidebar) return;
+      //Text, not markup. SLP wraps this in .text_below_map, which style.css
+      //hides so it cannot flash during the page-load search; re-emitting it
+      //under our own class is what keeps the desktop panel populated when a
+      //search fails.
+      var prompt_text = (sidebar.textContent || "").trim();
+      if (prompt_text === "") return;
+      this.sidebar_default = prompt_text;
     },
 
     /**
@@ -323,9 +329,12 @@
       jQuery("#sl_div").toggleClass("avalon_no_results", !!on);
       if (!on) return;
       var sidebar = document.getElementById("map_sidebar");
-      if (sidebar && this.sidebar_default !== null) {
-        sidebar.innerHTML = this.sidebar_default;
-      }
+      if (!sidebar || this.sidebar_default === null) return;
+      var prompt = document.createElement("div");
+      prompt.className = "avalon_sidebar_prompt";
+      prompt.textContent = this.sidebar_default;
+      sidebar.textContent = "";
+      sidebar.appendChild(prompt);
     },
 
     /**
@@ -338,9 +347,8 @@
       if (this.layout_normalized) return;
       var $link = jQuery("#get_my_position");
       var $wrapper = jQuery("#addy_in_address");
-      if ($link.length > 0 && $wrapper.length > 0) {
-        $link.insertBefore($wrapper);
-      }
+      if ($link.length === 0 || $wrapper.length === 0) return;
+      $link.insertBefore($wrapper);
       this.layout_normalized = true;
     },
 
@@ -451,6 +459,17 @@
       this.finish(count === 0 ? this.EMPTY : this.RESULTS);
     },
   };
+
+  //Run as soon as the markup is parsed rather than waiting for the Google
+  //Maps callback. Declared here, after avalon_guard exists, rather than in the
+  //IIFE at the top of this file: that block runs before this object is
+  //assigned, and relying on jQuery deferring the callback long enough would be
+  //a latent ordering trap. Both calls are idempotent and both re-run at
+  //map-ready if the elements were not present yet.
+  jQuery(document).ready(function () {
+    avalon_guard.normalize_search_layout();
+    avalon_guard.capture_sidebar_default();
+  });
 
   var avalon_cslmap = null;
   function cslmap_searchLocations() {
@@ -688,7 +707,8 @@
       //Issue 1 Path B. slp.run has already executed by map-ready, so
       //slp.send_ajax is defined and safe to replace here.
       avalon_guard.install_transport_hook();
-      //Presentation: runs before the first search response lands.
+      //Fallback only - both ran at DOM-ready and both are guarded, so this
+      //pair is a no-op in the normal case.
       avalon_guard.capture_sidebar_default();
       avalon_guard.normalize_search_layout();
     });
