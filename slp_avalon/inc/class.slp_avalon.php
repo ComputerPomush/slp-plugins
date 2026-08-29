@@ -62,6 +62,11 @@ if (!class_exists('SLP_Avalon')){
             add_action('slp_csv_processing_complete', array(self::$instance,'remove_old_csv_files_after_import'), 999);
             add_filter('posts_where', array(self::$instance,'attachments_posts_where'), 10, 2);
             add_filter('slp_ajaxsql_queryparams',array(self::$instance,'slp_ajaxsql_queryparams'),999,2);
+            // SLP Dealer Guard, Layer 3. Priority 20: after the priority-10
+            // callback above, so the gate is unconditionally the last thing to
+            // touch the payload and cannot be refilled by a later filter.
+            // Registered with add_filter, not add_action: this IS a filter.
+            add_filter('slp_ajax_find_locations_complete',array(self::$instance,'territory_gate'),20,1);
         }
 
         private function register_shortcodes(){
@@ -1054,6 +1059,150 @@ if (!class_exists('SLP_Avalon')){
                 return $key;
             }
             return false;
+        }
+        /* ==============================================================
+         * SLP Dealer Guard - Layer 3: server-side territory gate
+         * Phase 1, Step 2.
+         *
+         * Layers 0-2 are client-side and do the precise
+         * address_components.country work. This layer exists only to
+         * backstop a direct POST to admin-ajax.php, which bypasses all of
+         * them. Bounding boxes rather than a reverse geocode: a geocode
+         * call on every search would add cost and latency to the critical
+         * path for a check that Layers 0-2 have already made precisely.
+         *
+         * The boxes are deliberately coarse. They admit northern Mexico,
+         * the Bahamas, Bermuda, the BVI and open ocean. That is accepted:
+         * the goal is 'do not return US dealers for Paris', not sovereignty.
+         *
+         * Why a gate is needed at all: with ignore_radius, SLP's own SQL is
+         * ORDER BY sl_distance ASC LIMIT n with no radius bound, so it
+         * already returns the n nearest dealers on Earth. Verified by a live
+         * POST with Paris coordinates returning count 3.
+         *
+         * Reporting note. SLP Power's log_locations_for_reporting runs at
+         * priority 10 and is registered on init:11, while this plugin
+         * registers on plugins_loaded, so Power runs after the priority-10
+         * Avalon callback and before this gate. An out-of-territory search
+         * therefore records BOTH a query row (intended, Decision 7) and one
+         * slp_rep_query_results row per pre-gate dealer (a reporting
+         * artifact). Moving this gate below 10 would let the priority-10
+         * backfill refill the zeroed response and defeat the gate entirely.
+         * Enforcement wins; the artifact is documented, not fixed here.
+         * ============================================================== */
+
+        /**
+         * Territory bounding boxes. Single source of truth for the server
+         * side; the JS mirror lives in AVALON_TERRITORY_BOXES in
+         * assets/js/slp_avalon.js and must be kept identical.
+         *
+         * Territory is US + PR + VI + GU + MP + CA.
+         *
+         * @return array[]
+         */
+        public function territory_boxes(){
+            return array(
+                // name                    lat_min  lat_max   lng_min   lng_max
+                array( 'CONUS + Canada',      24.4,    83.2,   -141.0,    -52.0 ),
+                array( 'Alaska',              51.0,    71.6,   -173.0,   -129.0 ),
+                // Adak, Atka and Great Sitkin sit between -180 and -173 and
+                // fall outside the Alaska box. Widening that box instead would
+                // admit Wrangel Island (RU, 71.2N / -179.5); this one cannot.
+                array( 'Western Aleutians',   51.0,    54.0,   -180.0,   -173.0 ),
+                array( 'Aleutian wrap',       51.0,    54.0,    172.0,    180.0 ),
+                array( 'Hawaii',              18.5,    22.5,   -160.6,   -154.6 ),
+                array( 'Puerto Rico + USVI',  17.6,    18.6,    -67.5,    -64.5 ),
+                array( 'Guam + CNMI',         13.2,    20.6,    144.5,    146.1 ),
+            );
+        }
+
+        /**
+         * Is a coordinate pair inside the served territory?
+         *
+         * Bounds are inclusive: the Yukon/Alaska border is exactly -141.0 and
+         * the antimeridian is exactly 180.0, so both must pass.
+         *
+         * Anything non-numeric or physically impossible is out of territory.
+         * 0,0 is the Gulf of Guinea and is correctly rejected.
+         *
+         * @param  mixed $lat
+         * @param  mixed $lng
+         * @return bool
+         */
+        public function is_in_territory( $lat, $lng ){
+            if ( ! is_numeric( $lat ) || ! is_numeric( $lng ) ) {
+                return false;
+            }
+            $lat = (float) $lat;
+            $lng = (float) $lng;
+            if ( ! is_finite( $lat ) || ! is_finite( $lng ) ) {
+                return false;
+            }
+            if ( $lat < -90.0 || $lat > 90.0 || $lng < -180.0 || $lng > 180.0 ) {
+                return false;
+            }
+            foreach ( $this->territory_boxes() as $box ) {
+                list( , $lat_min, $lat_max, $lng_min, $lng_max ) = $box;
+                if ( $lat >= $lat_min && $lat <= $lat_max
+                     && $lng >= $lng_min && $lng <= $lng_max ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Layer 3. Filter on slp_ajax_find_locations_complete at priority 20.
+         *
+         * Rejection contract, read by avalon_guard.on_search_processed():
+         *   count                      0
+         *   response                   empty array
+         *   avalon_territory_rejected  true
+         *
+         * outside_radius is unset because it means 'results exist but sit
+         * outside the radius', which is no longer true, and because the JS
+         * returns early on it before the marker work.
+         *
+         * Pass-through cases:
+         *   - kill-switch SLP_AVALON_GUARD_DISABLE is defined and truthy
+         *   - the payload has no usable lat/lng at all, e.g. a load with no
+         *     coordinates, where there is no location to reject and SLP will
+         *     fall back to its configured map centre
+         *
+         * Deliberately NOT scoped to action csl_ajax_search. csl_ajax_onload
+         * accepts lat/lng too and would otherwise be an open bypass.
+         *
+         * @param  array $results
+         * @return array
+         */
+        public function territory_gate( $results ){
+            if ( defined( 'SLP_AVALON_GUARD_DISABLE' ) && SLP_AVALON_GUARD_DISABLE ) {
+                return $results;
+            }
+            if ( ! is_array( $results ) || empty( $results['http_query'] ) ) {
+                return $results;
+            }
+
+            $query = $results['http_query'];
+            $lat   = isset( $query['lat'] ) ? $query['lat'] : null;
+            $lng   = isset( $query['lng'] ) ? $query['lng'] : null;
+
+            // No coordinates supplied: nothing to gate. is_numeric('') and
+            // is_numeric(null) are both false, so this covers empty and absent.
+            if ( ! is_numeric( $lat ) || ! is_numeric( $lng ) ) {
+                return $results;
+            }
+
+            if ( $this->is_in_territory( $lat, $lng ) ) {
+                return $results;
+            }
+
+            $results['count']                     = 0;
+            $results['response']                  = array();
+            $results['avalon_territory_rejected'] = true;
+            unset( $results['outside_radius'] );
+
+            return $results;
         }
     }
 }

@@ -91,7 +91,63 @@
       "We couldn't find that location. Please check the spelling and try again.",
     timeout: "The search is taking longer than expected. Please try again.",
     transport: "We couldn't complete that search. Please try again.",
+    territory:
+      "We only have dealers in the United States and Canada. Please search " +
+      "a U.S. or Canadian city, state, or ZIP.",
   };
+
+  /* ==================================================================
+   * Territory bounding boxes - shared by Layers 0, 1 and 3.
+   * Phase 1, Step 2.
+   *
+   * MIRROR of SLP_Avalon::territory_boxes() in
+   * slp_avalon/inc/class.slp_avalon.php. The two must stay identical;
+   * change one and change the other in the same commit.
+   *
+   * Territory is US + PR + VI + GU + MP + CA.
+   *
+   * Layer 1 uses address_components.country where it has one, which is
+   * precise. These boxes are the fallback for the paths that have no
+   * address_components at all - URL-supplied place_lat / place_lng read
+   * in cslmap_build_map(), and the coords-spoof response built in
+   * cslmap_searchLocations(), which carries geometry only.
+   * ================================================================== */
+  var AVALON_TERRITORY_BOXES = [
+    //  name                   lat_min  lat_max   lng_min   lng_max
+    ["CONUS + Canada",           24.4,    83.2,   -141.0,    -52.0],
+    ["Alaska",                   51.0,    71.6,   -173.0,   -129.0],
+    //Adak, Atka and Great Sitkin sit between -180 and -173 and fall
+    //outside the Alaska box. Widening that box instead would admit
+    //Wrangel Island (RU, 71.2N / -179.5); this one cannot.
+    ["Western Aleutians",        51.0,    54.0,   -180.0,   -173.0],
+    ["Aleutian wrap",            51.0,    54.0,    172.0,    180.0],
+    ["Hawaii",                   18.5,    22.5,   -160.6,   -154.6],
+    ["Puerto Rico + USVI",       17.6,    18.6,    -67.5,    -64.5],
+    ["Guam + CNMI",              13.2,    20.6,    144.5,    146.1],
+  ];
+
+  /**
+   * Is a coordinate pair inside the served territory?
+   *
+   * Bounds are inclusive: the Yukon/Alaska border is exactly -141.0 and
+   * the antimeridian is exactly 180.0, so both must pass. Arguments may
+   * arrive as strings - URLSearchParams.get() always returns a string.
+   *
+   * @param  {number|string}  lat
+   * @param  {number|string}  lng
+   * @return {boolean}
+   */
+  function avalon_in_territory(lat, lng) {
+    var la = parseFloat(lat);
+    var ln = parseFloat(lng);
+    if (!isFinite(la) || !isFinite(ln)) return false;
+    if (la < -90 || la > 90 || ln < -180 || ln > 180) return false;
+    for (var i = 0; i < AVALON_TERRITORY_BOXES.length; i++) {
+      var b = AVALON_TERRITORY_BOXES[i];
+      if (la >= b[1] && la <= b[2] && ln >= b[3] && ln <= b[4]) return true;
+    }
+    return false;
+  }
 
   var avalon_guard = {
     IDLE: "IDLE",
@@ -452,6 +508,19 @@
     on_search_processed: function () {
       if (!this.is_busy()) return;
       var response = this.last_response;
+
+      //Layer 3 rejection. The server gate zeroes count and response, so
+      //without this branch the payload is indistinguishable from a genuine
+      //EMPTY - which finishes with no options, therefore no message, and
+      //the visitor gets a blank panel with no explanation.
+      if (response && response.avalon_territory_rejected) {
+        this.finish(this.REJECTED, {
+          message: AVALON_GUARD_MESSAGES.territory,
+          focus_input: this.user_initiated,
+        });
+        return;
+      }
+
       var count =
         response && typeof response.count !== "undefined"
           ? parseInt(response.count, 10)
