@@ -1090,7 +1090,29 @@
               if (status == google.maps.GeocoderStatus.OK) {
                 let address = results[0].formatted_address;
                 address = get_short_address_from_geocode(results[0].address_components);
-                jQuery("#addressInput").val(address);
+                //Write the position, not just the label for it.
+                //
+                //Until v0.0.7 this set only .val(). A programmatic .val()
+                //fires no change event, so the reset handler on #addressInput
+                //never ran and any place_lat / place_lng already on the field
+                //survived - the URL bootstrap's coordinates from
+                //cslmap_build_map, or an earlier autocomplete selection.
+                //cslmap_searchLocations() then took the coords branch and
+                //searched THAT location while showing this address.
+                //
+                //Populating is better than clearing: `pos` is the GPS fix and
+                //results[0] is its reverse geocode, so this avoids
+                //re-geocoding a truncated display string, saves a call, and
+                //gives Layer 1 a real country - which is what lets an
+                //out-of-territory position be rejected client-side.
+                //
+                //All three move together. Setting coordinates without the
+                //country would leave Layer 1 to no-op on a stale value.
+                jQuery("#addressInput")
+                  .val(address)
+                  .data("place_lat", pos.lat)
+                  .data("place_lng", pos.lng)
+                  .data("place_country", avalon_country_of(results[0]));
                 jQuery("#searchForm").find("input[type=submit]").trigger("click");
                 handle_geolocation_error({}, true);
               } else {
