@@ -33,10 +33,6 @@
       e.preventDefault();
       get_user_current_address();
     });
-    //Resize map to fit screen
-    jQuery(window).resize(function () {
-      resizeMap();
-    });
     $(document).ready(function () {
       $(".store_locator_single_contact p br + br").remove();
       // Comment below on 3/17/2026, was hiding input text on mobile 
@@ -81,8 +77,9 @@
    * is what surfaced Issue 1.
    *
    * States: IDLE -> RESOLVING -> SEARCHING -> { RESULTS | EMPTY | ERROR |
-   * TIMEOUT }. VALIDATING and REJECTED are declared but unreachable until
-   * Step 2 adds Layers 0, 1 and 3.
+   * TIMEOUT | REJECTED }. REJECTED has two call sites: Layer 1 inside
+   * install_geocode_hook(), and Layer 3 in on_search_processed(). VALIDATING
+   * is still declared but unreachable - it is Layer 0's state (Step 4).
    * ================================================================== */
   var AVALON_GUARD_TIMEOUT_MS = 12000;
 
@@ -107,10 +104,12 @@
    * Territory is US + PR + VI + GU + MP + AS + CA.
    *
    * Layer 1 uses address_components.country where it has one, which is
-   * precise. These boxes are the fallback for the paths that have no
-   * address_components at all - URL-supplied place_lat / place_lng read
-   * in cslmap_build_map(), and the coords-spoof response built in
-   * cslmap_searchLocations(), which carries geometry only.
+   * precise. These boxes are the coarse fallback for the paths that have no
+   * country at all: URL-supplied place_lat / place_lng read in
+   * cslmap_build_map(), and any coords-spoof response built in
+   * cslmap_searchLocations() for which no country was captured. Since
+   * v0.0.6 that payload DOES carry address_components whenever the
+   * autocomplete selection resolved a country.
    * ================================================================== */
   var AVALON_TERRITORY_BOXES = [
     //  name                   lat_min  lat_max   lng_min   lng_max
@@ -137,6 +136,13 @@
    * the antimeridian is exactly 180.0, so both must pass. Arguments may
    * arrive as strings - URLSearchParams.get() always returns a string.
    *
+   * NOTE: no caller as of v0.0.6. Layer 1 is country-based, deliberately -
+   * the boxes admit Tijuana, Nassau and Road Town, so a box check inside
+   * Layer 1 would catch nothing Layer 3 does not already catch while adding
+   * a second rejection rule with different precision to one layer. This is
+   * Layer 0's helper (Step 4), where the coordinates are read straight off
+   * #addressInput rather than inferred from a payload. Do not delete.
+   *
    * @param  {number|string}  lat
    * @param  {number|string}  lng
    * @return {boolean}
@@ -151,6 +157,48 @@
       if (la >= b[1] && la <= b[2] && ln >= b[3] && ln <= b[4]) return true;
     }
     return false;
+  }
+
+  /* ==================================================================
+   * Layer 1 allow-list. Country codes, not boxes: a country component is
+   * exact where a bounding box is coarse.
+   *
+   * ISO 3166-1 alpha-2, as Google returns short_name:
+   *   US United States    PR Puerto Rico   VI U.S. Virgin Islands
+   *   GU Guam             MP N. Marianas   AS American Samoa
+   *   CA Canada
+   *
+   * Same seven-entry set as territory_boxes(); change one, change both.
+   * ================================================================== */
+  var AVALON_ALLOWED_COUNTRIES = ["US", "PR", "VI", "GU", "MP", "AS", "CA"];
+
+  /**
+   * Read the ISO country code out of a geocoder result or a Places result.
+   *
+   * Returns null when there is no usable country component. That null is the
+   * no-op signal for Layer 1, and it is load-bearing: URL-supplied
+   * coordinates and any autocomplete selection Google did not resolve a
+   * country for arrive with address_components absent or empty, and those
+   * must fall through to Layer 3 rather than be rejected on a guess.
+   *
+   * @param  {object}       result  results[0], or a Places PlaceResult.
+   * @return {string|null}          upper-case alpha-2, or null.
+   */
+  function avalon_country_of(result) {
+    if (!result || !result.address_components) return null;
+    var parts = result.address_components;
+    if (!parts.length) return null;
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (!part || !part.types || !part.types.length) continue;
+      for (var j = 0; j < part.types.length; j++) {
+        if (part.types[j] !== "country") continue;
+        if (typeof part.short_name !== "string") return null;
+        var code = part.short_name.replace(/^\s+|\s+$/g, "").toUpperCase();
+        return code === "" ? null : code;
+      }
+    }
+    return null;
   }
 
   var avalon_guard = {
@@ -239,8 +287,9 @@
       }
       this.pending_url = null;
 
-      //REJECTED is unreachable until Step 2 but is wired here so the Layer 1
-      //and Layer 3 rejections inherit this presentation for free.
+      //Both rejection layers land here, so they share one presentation:
+      //markers already cleared, sidebar reset to the neutral prompt, and the
+      //territory message written above the field by options.message.
       this.set_no_results(
         terminal_state === this.ERROR ||
           terminal_state === this.TIMEOUT ||
@@ -424,12 +473,13 @@
     /* ------------------------------------------------------------- hooks */
 
     /**
-     * Issue 1 Path A, and the seam Step 2 uses for Layer 1.
+     * Issue 1 Path A, and the home of Layer 1.
      *
      * process_geocode_response is an instance property (slp_core.js:1526) and
      * doGeocode resolves it at call time (slp_core.js:1651), so a single
-     * assignment here catches the real geocode path AND the coords-spoof path
-     * at slp_avalon.js:119, which calls the same property on the instance.
+     * assignment here catches the real geocode path AND the coords-spoof
+     * path in cslmap_searchLocations(), which calls the same property on the
+     * same instance. One override, both paths - decision 10.
      */
     install_geocode_hook: function (cslmap) {
       if (this.original_geocode_response !== null) return;
@@ -444,7 +494,47 @@
           results.length > 0;
 
         if (ok) {
-          // Step 2 inserts the Layer 1 country check here, before delegating.
+          //Layer 1. The country component is authoritative where it exists.
+          //Where it does not, avalon_country_of() returns null and this
+          //no-ops by design: the decision falls to Layer 3 on the server.
+          var country = avalon_country_of(results[0]);
+
+          if (
+            country !== null &&
+            AVALON_ALLOWED_COUNTRIES.indexOf(country) === -1
+          ) {
+            var reject_was_busy = guard.is_busy();
+
+            //DO NOT mirror the ERROR path's `gmap === null -> delegate`
+            //branch below. That branch is safe there only because status is
+            //not OK, so the original takes its FAILURE branch
+            //(slp_core.js:1578) and builds a fallback-centred map without
+            //searching. Status IS OK here, so delegating would take the
+            //SUCCESS branch at slp_core.js:1527 -> 1555 and call build_map()
+            //with the location we just rejected. build_map is overridden to
+            //cslmap_build_map(), whose bootstrap then either re-submits
+            //#searchForm or calls load_markers() around that same rejected
+            //point - and the coarse boxes pass Tijuana, so Layer 3 would not
+            //catch it either. The visitor would get the territory message
+            //above the field and Mexican dealers below it.
+            //
+            //Consequence, accepted: on a site where gmap can still be null
+            //at the first geocode (map_center_lat unset), a rejected first
+            //search leaves the map unbuilt. Unreachable on Aura -
+            //map_center_lat is set, so slp_core.js:715 takes the build_map()
+            //branch and cslmap_build_map() assigns gmap before the bootstrap
+            //submit. Tahoe/Avalon portability item, tracked in the handoff.
+            if (cslmap.gmap !== null && reject_was_busy) {
+              cslmap.clearMarkers();
+            }
+
+            guard.finish(guard.REJECTED, {
+              message: AVALON_GUARD_MESSAGES.territory,
+              focus_input: guard.user_initiated,
+            });
+            return;
+          }
+
           guard.enter(guard.SEARCHING);
           return original.call(cslmap, results, status, message);
         }
@@ -492,8 +582,11 @@
             callback(response);
           })
           .fail(function () {
-            // send_ajax is shared with slp.option.get_from_server and others.
-            // Only a failure during the search leg is a search failure.
+            // Correction, v0.0.6: send_ajax is NOT shared with
+            // slp.option.get_from_server, which issues its own jQuery.getJSON
+            // (slp_core.js:848). slp_core.js:1849 is its only caller in the
+            // file. The state guard stays regardless: it costs nothing and it
+            // holds if a future SLP release routes anything else through here.
             if (guard.state !== guard.SEARCHING) return;
             guard.finish(guard.ERROR, {
               message: AVALON_GUARD_MESSAGES.transport,
@@ -597,11 +690,24 @@
       //We need to spoof the process_geocode_response function with a fake geocode response,status and message
       let fake_status = google.maps.GeocoderStatus.OK;
       let fake_message = "";
+      let place_country = jQuery("#addressInput").data("place_country");
       let fake_geocode_response = [
         {
           geometry: {
             location: coords,
           },
+          //Shaped like a real geocode result so Layer 1 needs no special
+          //case. Empty when no country was captured, which is the documented
+          //no-op signal - Layer 3 decides those.
+          address_components: place_country
+            ? [
+                {
+                  short_name: place_country,
+                  long_name: place_country,
+                  types: ["country"],
+                },
+              ]
+            : [],
         },
       ];
       avalon_cslmap.process_geocode_response(
@@ -628,34 +734,45 @@
     }
   }
   // jQuery;
-  function resizeMap() {
-    let window_height = jQuery(window).height();
-    let header_height = jQuery("header#header").outerHeight();
-    let new_height = window_height - header_height;
-    jQuery("#sl_bottom_right").height(new_height);
-    jQuery("#sl_bottom_left").height(new_height);
-    jQuery("#sl_bottom_left").css("min-height", new_height + "px");
-    jQuery("#sl_bottom_left #results_box").css(
-      "max-height",
-      new_height - jQuery("#sl_bottom_left #search_box").outerHeight() - 0.01 + "px"
-    );
-  }
+  //resizeMap() and its window.resize binding were deleted in v0.0.6.
+  //Every value the function computed was NaN and it had been a no-op for as
+  //long as this page has existed:
+  //  * jQuery("header#header") matched nothing - there is no <header> on
+  //    find-a-dealer - so window_height - undefined = NaN, and both
+  //    .height(NaN) and .css("min-height","NaNpx") are invalid and ignored.
+  //  * "#sl_bottom_left #search_box" was a descendant selector, but
+  //    #search_box is a SIBLING of #sl_bottom_left in the live DOM.
+  //Layout comes from style.css. Do not reinstate this; making it "work"
+  //would change the layout for the first time in the file's history.
   var boundary_circle = null;
   var markers_list_natural = null;
   //Reset location data when address changes
   jQuery(document).on("change", "#addressInput", function () {
     jQuery(this).data("place_lat", null);
     jQuery(this).data("place_lng", null);
+    //All three reset together. Nulling only the coordinates would leave a
+    //stale country to be validated against a fresh location.
+    jQuery(this).data("place_country", null);
   });
   function initialize_autocomplete() {
     let input = document.getElementById("addressInput");
     if (!input) return;
     let places_autocomplete = new google.maps.places.Autocomplete(input);
+    //Layer 1 needs the country component; geometry is what the handler below
+    //already reads. Nothing else is used, and naming the field set also drops
+    //this call from the Places Details SKU to Basic Data. Must live inside
+    //this function - places_autocomplete is a local.
+    places_autocomplete.setFields(["address_components", "geometry"]);
     places_autocomplete.addListener("place_changed", function () {
       let selected = places_autocomplete.getPlace();
       if (typeof selected.geometry != "undefined") {
         jQuery(input).data("place_lat", selected.geometry.location.lat());
         jQuery(input).data("place_lng", selected.geometry.location.lng());
+        //Carried onto the spoofed payload in cslmap_searchLocations() so the
+        //coords branch reaches Layer 1 looking like a real geocode. This is
+        //what closes the autocomplete bypass: before v0.0.6 an autocomplete
+        //selection was protected by nothing on the client at all.
+        jQuery(input).data("place_country", avalon_country_of(selected));
         jQuery("#searchForm").find("input[type=submit]").trigger("click");
       }
     });
@@ -775,7 +892,7 @@
       avalon_cslmap = cslmap;
       avalon_cslmap.build_map = cslmap_build_map;
       avalon_cslmap.searchLocations = cslmap_searchLocations;
-      //Issue 1 Path A + the Step 2 seam for Layer 1.
+      //Issue 1 Path A + Layer 1. One override serves both.
       avalon_guard.install_geocode_hook(cslmap);
       //Issue 1 Path B. slp.run has already executed by map-ready, so
       //slp.send_ajax is defined and safe to replace here.
@@ -809,9 +926,11 @@
     //REMOVED - jQuery("#searchForm").on("submit") -> sl_show_loading(true).
     //  #searchForm carries an inline onsubmit attribute, registered at
     //  parse time, so it runs BEFORE any jQuery-bound submit handler. Once
-    //  Step 2 can reject synchronously inside searchLocations(), this
-    //  handler would switch the spinner back on with nothing left to
-    //  switch it off - trading a geocode hang for a validation hang.
+    //  Layer 0 (Step 4) can reject synchronously inside searchLocations(),
+    //  this handler would switch the spinner back on with nothing left to
+    //  switch it off - trading a geocode hang for a validation hang. Layer 1
+    //  is not exposed to this: it rejects from inside an async geocode
+    //  callback, long after the inline onsubmit has returned.
     //REMOVED - DOMSubtreeModified on #map_sidebar -> sl_show_loading(false).
     //  Mutation Events were removed in Chrome 135, Edge 137, Firefox 140
     //  and Safari 26, so this stopped firing in every shipping browser.
@@ -819,7 +938,10 @@
   }
   function avalon_slp_on_location_search_responded(response) {
     //Handed to the Guard so on_search_processed() can tell RESULTS from
-    //EMPTY. Step 2 reads avalon_territory_rejected off the same payload.
+    //EMPTY. Layer 3 reports itself through avalon_territory_rejected on this
+    //same payload. A Layer 1 rejection never gets here - it returns before
+    //any AJAX is issued - which is the whole point of moving the check
+    //client-side.
     avalon_guard.last_response = response;
     if (response && parseInt(response.count, 10) > 0) {
       avalon_guard.set_no_results(false);
