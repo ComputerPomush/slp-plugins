@@ -1,0 +1,8 @@
+# SLP Dealer Guard: every deploy is verified by comparing the server-side
+# md5sum to the local working tree, so these files must round-trip
+# byte-identically regardless of how core.autocrlf happens to be set on the
+# machine doing the commit. They are stored in git with literal CRLF, and
+# -text disables end-of-line conversion on both check-in and checkout.
+#
+# Upstream SLP plugins are never edited, so they are deliberately left alone.
+slp_avalon/** -text

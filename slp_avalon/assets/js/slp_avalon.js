@@ -104,7 +104,7 @@
    * slp_avalon/inc/class.slp_avalon.php. The two must stay identical;
    * change one and change the other in the same commit.
    *
-   * Territory is US + PR + VI + GU + MP + CA.
+   * Territory is US + PR + VI + GU + MP + AS + CA.
    *
    * Layer 1 uses address_components.country where it has one, which is
    * precise. These boxes are the fallback for the paths that have no
@@ -124,6 +124,10 @@
     ["Hawaii",                   18.5,    22.5,   -160.6,   -154.6],
     ["Puerto Rico + USVI",       17.6,    18.6,    -67.5,    -64.5],
     ["Guam + CNMI",              13.2,    20.6,    144.5,    146.1],
+    //Swains Island sits 380 km north of Tutuila at -11.06, which is why
+    //this box reaches so far north. The -171.2 western edge clears Cape
+    //Tapaga, the eastern tip of Upolu (independent Samoa, WS), by ~18 km.
+    ["American Samoa",          -14.6,   -11.0,   -171.2,   -168.0],
   ];
 
   /**
