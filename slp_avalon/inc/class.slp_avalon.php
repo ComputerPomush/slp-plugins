@@ -170,16 +170,41 @@ if (!class_exists('SLP_Avalon')){
             //return $results;
             //If we are searching for state name, make sure the results are in the state
             if (isset($_POST['address'])){
-                $address  = $_POST['address'];
-                $address = str_replace(", USA","",$address);
-                $address = str_replace(",USA","",$address);
-                $address = str_replace(" USA","",$address);
-                $address = str_replace(",","",$address);
+                //Was five str_replace lines duplicated verbatim in
+                //slp_ajaxsql_queryparams(). The copies had diverged - only
+                //that one trimmed - and both feed is_state(), so the
+                //divergence could raise the SQL limit to 50 while this
+                //filter, the thing meant to narrow those 50 rows, sat out.
+                $address = $this->normalize_search_address($_POST['address']);
                 if ($this->is_state($address)){
                     $stateInitial = $this->get_state_initial($address);
                     $new_response = array();
+                    //The canonical name for the code we matched. Derived
+                    //from the table rather than from $address because
+                    //strcasecmp() does not fold accents: a visitor typing
+                    //Quebec with its accent and one typing it without must
+                    //both match a record stored as QUEBEC.
+                    $states     = $this->get_states();
+                    $state_full = isset($states[$stateInitial])
+                        ? $states[$stateInitial]
+                        : '';
                     foreach ($results['response'] as $k=>$loc){
-                        if ($loc['state'] == $stateInitial){
+                        //sl_state is stored inconsistently. Live values on
+                        //Aura DEV include MI and NH but also NEW HAMPSHIRE,
+                        //DELAWARE and ONTARIO. A code-only compare drops a
+                        //dealer that IS in the searched state, and the
+                        //distance-ranked backfill then re-admits it in the
+                        //wrong position or not at all.
+                        //
+                        //Cast before compare: 25 of 308 records carry a
+                        //malformed state and strcasecmp(null, ...) is
+                        //deprecated on PHP 8.4. error.log is publicly
+                        //reachable, so deprecation spam is not free.
+                        $state_name = (string) (isset($loc['state']) ? $loc['state'] : '');
+                        if (
+                            strcasecmp($state_name, (string) $stateInitial) === 0 ||
+                            ($state_full !== '' && strcasecmp($state_name, $state_full) === 0)
+                        ){
                             $new_response[] = $loc;
                         }
                     }
@@ -982,12 +1007,11 @@ if (!class_exists('SLP_Avalon')){
         //Show all dealers in a state when the search is exactly for a state name
         public function slp_ajaxsql_queryparams($parameters,$query_slug){
             if (isset($_POST['address'])){
-                $address  = $_POST['address'];
-                $address = str_replace(", USA","",$address);
-                $address = str_replace(",USA","",$address);
-                $address = str_replace(" USA","",$address);
-                $address = str_replace(",","",$address);
-                $address = trim($address);
+                //Same normalisation as the priority-10 filter, from the
+                //same function on purpose. If these two ever disagree
+                //about what counts as a state name, the limit and the
+                //filter disagree with it.
+                $address = $this->normalize_search_address($_POST['address']);
                 if ($this->is_state($address)){
                     $parameters[4] = 50;
                 }
@@ -1045,20 +1069,137 @@ if (!class_exists('SLP_Avalon')){
                 'WA'=>"Washington",  
                 'WV'=>"West Virginia",  
                 'WI'=>"Wisconsin",  
-                'WY'=>"Wyoming"
+                'WY'=>"Wyoming",
+                /* Canadian provinces and territories, v0.0.12. Issue 10.
+                 *
+                 * Confirmed necessary by live data, not assumed: the
+                 * nearest dealer to Toronto stores its state as ONTARIO,
+                 * full name and upper case, and before this build a search
+                 * for the province was not recognised at all - so the SQL
+                 * limit stayed at 3 and the three nearest dealers to the
+                 * provincial centroid, all in Michigan, were the answer.
+                 *
+                 * None of these two-letter keys collides with the 51 US
+                 * entries above. All 13 were checked against that list. */
+                'AB'=>"Alberta",
+                'BC'=>"British Columbia",
+                'MB'=>"Manitoba",
+                'NB'=>"New Brunswick",
+                'NL'=>"Newfoundland and Labrador",
+                'NS'=>"Nova Scotia",
+                'NT'=>"Northwest Territories",
+                'NU'=>"Nunavut",
+                'ON'=>"Ontario",
+                'PE'=>"Prince Edward Island",
+                'QC'=>"Quebec",
+                'SK'=>"Saskatchewan",
+                'YT'=>"Yukon"
             );
             return $state_list;
         }
-        public function is_state($string){
-            $states = $this->get_states();
-            return in_array(ucwords($string),$states);
+
+        /**
+         * Spellings that are not the canonical name but mean one.
+         *
+         * Kept separate from get_states() because that array is code =>
+         * name and must stay one entry per code - get_state_initial()
+         * reverses it, and a second Quebec would make which code wins
+         * depend on insertion order.
+         *
+         * Deliberately does NOT include bare two-letter codes. IN, OR, OK,
+         * HI, ME, DE, LA, MA, MS, MT and CO are ordinary English words, and
+         * a visitor typing "or" being sent to Oregon is a worse failure
+         * than not recognising "OR" as a state.
+         *
+         * @return array  lower-cased spelling => code
+         */
+        public function get_state_aliases(){
+            return array(
+                //Google returns the accented form under a French locale.
+                "qu\xc3\xa9bec"          => 'QC',
+                'newfoundland'      => 'NL',
+                'yukon territory'   => 'YT',
+            );
         }
-        public function get_state_initial($state_name){
-            $key = array_search(ucwords($state_name),$this->get_states());
-            if ($key !== false){
-                return $key;
+
+        /**
+         * Lower-cased name => code, built once per request.
+         *
+         * @return array
+         */
+        public function get_state_lookup(){
+            static $lookup = null;
+            if ( $lookup === null ) {
+                $lookup = array();
+                foreach ( $this->get_states() as $code => $name ) {
+                    $lookup[ strtolower( $name ) ] = $code;
+                }
+                foreach ( $this->get_state_aliases() as $spelling => $code ) {
+                    $lookup[ strtolower( $spelling ) ] = $code;
+                }
             }
-            return false;
+            return $lookup;
+        }
+
+        /**
+         * Strip the country suffix and punctuation from a search string.
+         *
+         * One function because the five str_replace lines it replaces were
+         * duplicated in slp_ajax_find_locations_complete_filter() and
+         * slp_ajaxsql_queryparams(), and had already diverged.
+         *
+         * The suffix is ANCHORED to the end of the string. The old
+         * str_replace(" USA",...) matched anywhere, which was harmless for
+         * USA but would turn "La Canada Flintridge" into "La Flintridge"
+         * once Canada joined it. Case-insensitive because the field renders
+         * in caps and Google writes "Ontario, Canada" into it on an
+         * autocomplete selection.
+         *
+         * @param  mixed $raw  $_POST['address']. Always set: slp_core.js
+         *                     1809 posts saneValue("addressInput",
+         *                     "no address entered").
+         * @return string
+         */
+        public function normalize_search_address( $raw ){
+            $address  = (string) $raw;
+            $stripped = preg_replace(
+                '/\\s*,?\\s*(?:USA|U\\.S\\.A\\.|United States|Canada)\\s*$/i',
+                '',
+                $address
+            );
+            //preg_replace returns null only on a PCRE error. Falling back to
+            //the unstripped string keeps a pathological input searchable
+            //instead of turning it into an empty query.
+            if ( $stripped !== null ) {
+                $address = $stripped;
+            }
+            return trim( str_replace( ',', '', $address ) );
+        }
+
+        /**
+         * @param  string $string
+         * @return bool
+         */
+        public function is_state($string){
+            //Delegates rather than repeating the lookup. The previous pair
+            //each called ucwords() separately, so the case defect had to be
+            //fixed in two places or not at all.
+            return $this->get_state_initial( $string ) !== false;
+        }
+
+        /**
+         * @param  string $state_name
+         * @return string|false  the two-letter code, or false
+         */
+        public function get_state_initial($state_name){
+            //Was array_search(ucwords($state_name), ...). ucwords() upper-
+            //cases the first letter of each word and leaves the rest, so
+            //ucwords("MICHIGAN") is "MICHIGAN" and never matched the table.
+            //Measured on Aura DEV: address=Michigan returned 35 results,
+            //address=MICHIGAN returned 3.
+            $lookup = $this->get_state_lookup();
+            $key    = strtolower( trim( (string) $state_name ) );
+            return isset( $lookup[ $key ] ) ? $lookup[ $key ] : false;
         }
         /* ==============================================================
          * SLP Dealer Guard - Layer 3: server-side territory gate
