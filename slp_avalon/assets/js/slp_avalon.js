@@ -333,6 +333,60 @@
     show_spinner: function (show) {
       this.ensure_spinner();
       sl_show_loading(show);
+      //Only on the way in, and only after sl_show_loading(true): while
+      //.sl_hidden is applied the indicator is display:none, so every
+      //measurement below would read zero.
+      if (show) this.center_spinner();
+    },
+
+    /**
+     * Put the spinner icon in the middle of the map.
+     *
+     * The scrim covers all of #sl_div - search column, results panel and
+     * map - which is correct, because it has to block interaction with all
+     * three. Its geometric centre is not a good place for the icon, though:
+     * the search column occupies the left third, so 50%/50% lands near the
+     * map's LEFT EDGE. Measured on Aura DEV at a 1920 viewport, scrim
+     * 338..1918 against map 907..1918, which put the icon about 260px left
+     * of where the eye looks for it.
+     *
+     * Measured rather than expressed in CSS because CSS cannot centre an
+     * element on a sibling without hardcoding the column widths, and
+     * style.css is per-site with four distinct md5s across the six
+     * environments. Decision 6.
+     *
+     * Offsets go in left/top, NEVER in transform. v0.0.8 shipped
+     * `transform: translate(-50%,-50%)` on this icon and it was discarded
+     * on every frame: .fa-spin declares
+     * `animation: fa-spin 2s linear infinite` and its keyframes set
+     * `transform: rotate(...)`, which outranks an author normal
+     * declaration. Font Awesome 5.15.3, loaded by Elementor.
+     */
+    center_spinner: function () {
+      var indicator = document.getElementById("sl_loading_indicator");
+      if (!indicator) return;
+      var icon = indicator.querySelector("i");
+      if (!icon) return;
+
+      var host = indicator.getBoundingClientRect();
+      var map_box = document.getElementById("map_box");
+      var target = map_box ? map_box.getBoundingClientRect() : null;
+
+      //No map yet at the page-load bootstrap, and the stacked layout at
+      //<=768px can leave it zero-sized. Either way the scrim is the right
+      //thing to centre on.
+      if (!target || !target.width || !target.height) {
+        target = host;
+      }
+
+      //offsetWidth is 0 if the webfont has not resolved yet; fa-3x is 48px.
+      var w = icon.offsetWidth || 48;
+      var h = icon.offsetHeight || 48;
+
+      icon.style.left =
+        target.left - host.left + target.width / 2 - w / 2 + "px";
+      icon.style.top =
+        target.top - host.top + target.height / 2 - h / 2 + "px";
     },
 
     /**
@@ -395,13 +449,13 @@
             ".avalon_sidebar_prompt{color:#FFFFFF;font-size:16px;" +
             "line-height:24px;font-family:var(--body-font-family);" +
             "padding:16px 0;}" +
-            //The spinner icon is placed at left/top 50% with no transform,
-            //so it hangs below and right of true centre by half its own
-            //size. The offending rule is in all four theme stylesheets and
-            //SLP ships none, so it is corrected here rather than in four
-            //divergent files. ID selector, so this wins on specificity
-            //rather than on source order.
-            "#sl_loading_indicator i{transform:translate(-50%,-50%);}" +
+            //NOTE there is deliberately no rule here for the spinner icon.
+            //v0.0.8 tried `#sl_loading_indicator i{transform:translate(
+            //-50%,-50%)}` and it never applied: .fa-spin runs
+            //`animation: fa-spin 2s linear infinite` whose keyframes set
+            //`transform: rotate(...)`, and an animation beats an author
+            //normal declaration in the cascade. The icon is positioned by
+            //center_spinner() instead, in left/top, at show time.
             "</style>"
         )
       );
