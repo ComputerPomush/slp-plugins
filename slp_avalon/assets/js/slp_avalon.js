@@ -681,6 +681,30 @@
       this.original_send_ajax = slp.send_ajax;
 
       slp.send_ajax = function (action, callback) {
+        // Which request is this? Decided BEFORE the post goes out, because
+        // the failure leg below has no other way to tell.
+        //
+        // send_ajax has two live callers on this page, not one:
+        //   slp_core.js:1849      the location search
+        //   slp-experience        SLPEXP.email_form.send_email, posting
+        //                         {action:"email_form", formdata:...}
+        // and this wrapper is global, so both route through it.
+        //
+        // slp_core.js:1808 defaults action.action to csl_ajax_search and
+        // 1842 rewrites it to csl_ajax_onload for the page-load search.
+        // Those two names are the search path and nothing else is.
+        //
+        // An unrecognised shape is treated AS a search, so it keeps the
+        // v0.0.10 behaviour. A future caller quietly losing its error
+        // reporting would be a worse bug than the one this fixes.
+        var named =
+          !!action && typeof action === "object" &&
+          typeof action.action === "string";
+        var is_search = named
+          ? action.action === "csl_ajax_search" ||
+            action.action === "csl_ajax_onload"
+          : true;
+
         return jQuery
           .post(slplus.ajaxurl, action, function (response) {
             try {
@@ -689,14 +713,15 @@
             callback(response);
           })
           .fail(function () {
-            // Correction, v0.0.8: send_ajax is NOT shared with
-            // slp.option.get_from_server, which issues its own jQuery.getJSON
-            // (slp_core.js:848). It IS shared with SLPEXP.email_form.send_email
-            // in slp-experience_userinterface.min.js, which is enqueued on this
-            // page - so this guard is load-bearing today, not insurance. It is
-            // also not sufficient: an email_form POST that fails WHILE a search
-            // is in flight passes this check and aborts a healthy search.
-            // v0.0.9 replaces the state test with an action.action test.
+            // v0.0.11. Was a bare state test, which held whenever no
+            // search was running and failed exactly when one was: an
+            // email_form POST erroring mid-search finished that search
+            // with ERROR and the transport message. Narrow window, but it
+            // reported a failure that had not happened.
+            if (!is_search) return;
+            // Kept as the cycle guard: a failure arriving after the 12s
+            // ceiling has already fired must not reopen anything. finish()
+            // would no-op anyway; this says so out loud.
             if (guard.state !== guard.SEARCHING) return;
             guard.finish(guard.ERROR, {
               message: AVALON_GUARD_MESSAGES.transport,
