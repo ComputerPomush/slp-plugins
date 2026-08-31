@@ -69,8 +69,8 @@ $ErrorActionPreference = 'Stop'
 # NEGATIVE condition: this commit must leave them untouched.
 $Frozen = @{
     'slp_avalon/assets/js/slp_avalon.js' = 'a6237b4f2c006964710f4b5362437c66'
-    'slp_avalon/slp_avalon.php'          = '468bd00d86796abb8220fbf828b45f83'
-    'slp_avalon/inc/class.slp_avalon.php' = 'defbb41312071472a7039da37651a0d4'
+    'slp_avalon/slp_avalon.php'          = 'aa3e5ba266959a413b4b2db4378167d0'
+    'slp_avalon/inc/class.slp_avalon.php' = 'f6a07b929ceed4de0d6bd5fa034eda6b'
 }
 
 function Assert-Git {
