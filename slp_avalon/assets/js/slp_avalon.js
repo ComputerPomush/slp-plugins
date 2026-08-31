@@ -303,8 +303,29 @@
       // once a search has actually succeeded, so a refresh cannot replay a
       // URL that hung. add_url_param() stays a remove-list (constraint C1);
       // the UTM parameters on the URL are untouched either way.
-      if (terminal_state === this.RESULTS && this.pending_url) {
-        window.history.replaceState(null, "", this.pending_url);
+      //
+      // Issue 16, v0.0.13. Rule (c) stopped a failure from DIRTYING the bar
+      // but never CLEANED one the visitor arrived on, so a refresh replayed
+      // it: land on ?place_lat=48.86&place_lng=2.35, get the territory
+      // message, refresh, get it again, forever.
+      //
+      // Write on RESULTS, clean on every other terminal state. Decision 35.
+      // Any narrower rule leaves a case where the parameters on the bar do
+      // not describe what is on the screen: land on ?place_address=Detroit,
+      // search somewhere with no dealers, and EMPTY would keep replaying
+      // Detroit. Two costs were accepted with it - a genuine no-dealers
+      // result stops being shareable as a link, and a TIMEOUT on a slow but
+      // valid search loses the query on refresh rather than retrying it.
+      if (terminal_state === this.RESULTS) {
+        //Null on the get_user_current_address() bootstrap, which reaches
+        //load_markers() directly and never composes a URL. Nothing to write
+        //and nothing to clean - there were no place_ parameters to begin
+        //with - so this case falls through both branches on purpose.
+        if (this.pending_url) {
+          window.history.replaceState(null, "", this.pending_url);
+        }
+      } else {
+        this.clean_url();
       }
       this.pending_url = null;
 
@@ -323,6 +344,45 @@
       if (options.focus_input) {
         this.focus_input();
       }
+    },
+
+    /**
+     * Issue 16. Strip the three search parameters from the address bar and
+     * leave everything else on it alone.
+     *
+     * A remove-list, not a keep-list. Constraint C1: UTM parameters arrive
+     * on a first-touch URL before any cookie exists, so a keep-list would
+     * discard attribution for exactly the visitors it is there to measure.
+     * add_url_param() already deletes on a falsy value, and these are the
+     * same three keys cslmap_searchLocations() composes. place_country is
+     * deliberately not among them: it never reaches the URL, it lives only
+     * in jQuery .data() on #addressInput.
+     *
+     * Measured from window.location.href, NEVER from pending_url. On the
+     * path this exists to fix, pending_url is always null - a Layer 0
+     * rejection returns before pending_url is assigned, and start() nulls
+     * it at the top of every cycle.
+     *
+     * Safe to run mid-cycle because nothing else reads these parameters or
+     * touches history. cslmap_build_map() reads them once at init, before
+     * any search can finish, and slp_core.min.js - the build that actually
+     * runs - has no reference to place_address, place_lat or place_lng and
+     * no history call at all.
+     *
+     * The no-op test is load-bearing, not tidiness. Without it every
+     * rejection from an already-clean URL issues a pointless replaceState,
+     * and suite-core's assertion that a rejected search does not rewrite
+     * the URL - the regression net for rule (c) - would have to be weakened
+     * to let this feature through.
+     */
+    clean_url: function () {
+      var cleaned = add_url_param({
+        place_address: null,
+        place_lat: null,
+        place_lng: null,
+      });
+      if (cleaned.href === window.location.href) return;
+      window.history.replaceState(null, "", cleaned.href);
     },
 
     arm_timer: function () {
