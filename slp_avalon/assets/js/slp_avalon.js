@@ -91,6 +91,10 @@
     territory:
       "We only have dealers in the United States and Canada. Please search " +
       "a U.S. or Canadian city, state, or ZIP.",
+    //Layer 0 only. Deliberately not the territory copy: nothing about
+    //"!!!" is out of territory, and telling the visitor it is would send
+    //them looking for a problem that is not there.
+    invalid_input: "Please enter a city, state, ZIP or postal code.",
   };
 
   /* ==================================================================
@@ -171,6 +175,22 @@
    * Same seven-entry set as territory_boxes(); change one, change both.
    * ================================================================== */
   var AVALON_ALLOWED_COUNTRIES = ["US", "PR", "VI", "GU", "MP", "AS", "CA"];
+
+  /**
+   * Layer 0's syntactic floor: does this string contain anything that
+   * could possibly be part of a place name, a street number, a ZIP or a
+   * postal code?
+   *
+   * The Latin-1 Supplement and Latin Extended-A ranges are included so
+   * that accented input cannot be rejected. No realistic Quebec place
+   * name is composed entirely of accented characters, but the cost of
+   * covering it is one range and the cost of getting it wrong is a
+   * customer who cannot search for where they live.
+   *
+   * This is the whole test, on purpose. See build-v010.py for why an
+   * address-shape validator was rejected.
+   */
+  var AVALON_SEARCHABLE = /[A-Za-z0-9\u00C0-\u024F]/;
 
   /**
    * Read the ISO country code out of a geocoder result or a Places result.
@@ -800,7 +820,12 @@
         ? " " + slplus.options.append_to_search.trim()
         : "";
   
-    let address = avalon_cslmap.saneValue("addressInput", "") + append_this;
+    //Held separately from `address` because append_to_search is a
+    //settings-driven suffix: if it is ever set, it would smuggle letters
+    //into the string Layer 0's floor is supposed to judge, and the floor
+    //would silently stop working. saneValue() already trims.
+    let raw_address = avalon_cslmap.saneValue("addressInput", "");
+    let address = raw_address + append_this;
     //Do we already have coordinates?
     let coords = null;
     if (
@@ -816,6 +841,55 @@
       //   jQuery("#addressInput").data("place_lng")
       // );
     }
+  
+    /* ---------------------------------------------------------- Layer 0
+     * Synchronous pre-flight. Runs before unhide_map(), before the URL is
+     * composed and before either branch below, so a rejection touches
+     * nothing: no geocode, no AJAX, no map movement, no marker.
+     *
+     * Safe to reject synchronously only because #searchForm has no
+     * jQuery-bound submit handler. It carries an inline onsubmit attribute
+     * registered at parse time, so any jQuery handler would run AFTER this
+     * function returns and would switch the spinner back on with nothing
+     * left to switch it off. The one that used to exist was removed in
+     * v0.0.6; see the note in avalon_init_gmaps(). Do not reintroduce it.
+     * ------------------------------------------------------------------ */
+    avalon_guard.enter(avalon_guard.VALIDATING);
+
+    //(a) Syntactic floor. Only meaningful when the visitor actually typed
+    //something: an empty field with no coordinates is a legitimate search
+    //from the map centre and is handled in the else branch below.
+    if (!coords && raw_address && !AVALON_SEARCHABLE.test(raw_address)) {
+      avalon_guard.finish(avalon_guard.REJECTED, {
+        message: AVALON_GUARD_MESSAGES.invalid_input,
+        focus_input: avalon_guard.user_initiated,
+      });
+      return;
+    }
+
+    //(b) Decision 16, and the reason Layer 0 exists. Coordinates arrive
+    //here from three places: an autocomplete selection, the URL bootstrap
+    //in cslmap_build_map(), and Get My Position. Only the first carries a
+    //country, so Layer 1 no-ops on the other two and SLP would otherwise
+    //pin and pan the map to a location we are about to reject. Issue 15.
+    //
+    //The boxes are coarse and admit Tijuana, Nassau and Road Town. That is
+    //deliberate and unchanged: those carry a country, so Layer 1 catches
+    //them precisely. This check only has to agree with Layer 3, which uses
+    //the same eight boxes, so it rejects nothing the server would accept.
+    //
+    //avalon_in_territory() parseFloats, so the strings that
+    //URLSearchParams hands back need no conversion here.
+    if (coords && !avalon_in_territory(coords.lat, coords.lng)) {
+      avalon_guard.finish(avalon_guard.REJECTED, {
+        message: AVALON_GUARD_MESSAGES.territory,
+        focus_input: avalon_guard.user_initiated,
+      });
+      return;
+    }
+
+    //Past the gate. Everything from here is the pre-existing flow.
+    avalon_guard.enter(avalon_guard.RESOLVING);
   
     avalon_cslmap.unhide_map();
   
