@@ -65,13 +65,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# The v0.0.11 pins, copied from Publish-Step7.ps1 $Expected. Asserted here as a
-# NEGATIVE condition: this commit must leave them untouched.
-$Frozen = @{
-    'slp_avalon/assets/js/slp_avalon.js' = 'a6237b4f2c006964710f4b5362437c66'
-    'slp_avalon/slp_avalon.php'          = 'aa3e5ba266959a413b4b2db4378167d0'
-    'slp_avalon/inc/class.slp_avalon.php' = 'f6a07b929ceed4de0d6bd5fa034eda6b'
-}
+# Artefacts this commit must not touch. Compared against HEAD, not against
+# hardcoded md5s: a pinned hash goes stale on every version and then reports
+# a legitimate, already-committed change as "a hygiene commit must not carry a
+# code change." Comparing to HEAD asks the question that actually matters -
+# is there an UNCOMMITTED artefact change riding along - and never needs
+# editing again. It was pinned to v0.0.11, went stale at v0.0.12, and this is
+# the fix rather than another manual bump.
+$Frozen = @(
+    'slp_avalon/assets/js/slp_avalon.js',
+    'slp_avalon/slp_avalon.php',
+    'slp_avalon/inc/class.slp_avalon.php'
+)
 
 function Assert-Git {
     <#
@@ -99,23 +104,30 @@ try {
 
     # ------------------------------------------------- artefacts must be frozen
     Write-Host ''
-    Write-Host 'Plugin artefacts unchanged at v0.0.11' -ForegroundColor Cyan
+    Write-Host 'Plugin artefacts match HEAD' -ForegroundColor Cyan
     $allOk = $true
-    foreach ($rel in $Frozen.Keys | Sort-Object) {
-        $full = Join-Path $PluginRepo $rel
-        if (-not (Test-Path -LiteralPath $full)) {
+    foreach ($rel in $Frozen) {
+        if (-not (Test-Path -LiteralPath (Join-Path $PluginRepo $rel))) {
             Write-Host ("  FAIL  MISSING: {0}" -f $rel) -ForegroundColor Red
             $allOk = $false
             continue
         }
-        $md5 = (Get-FileHash -LiteralPath $full -Algorithm MD5).Hash.ToLower()
-        if ($md5 -ne $Frozen[$rel]) {
+        # --no-filters so the comparison is the bytes on disk, not what
+        # core.autocrlf would make of them. slp_avalon/** is -text anyway.
+        $tree = (& git hash-object --no-filters -- $rel).Trim()
+        Assert-Git 'hash-object'
+        $head = (& git rev-parse "HEAD:$rel").Trim()
+        Assert-Git 'rev-parse'
+
+        if ($tree -ne $head) {
             Write-Host ("  FAIL  {0}" -f $rel) -ForegroundColor Red
-            Write-Host ("          {0} != {1}" -f $md5, $Frozen[$rel]) -ForegroundColor Red
-            Write-Host  '          A hygiene commit must not carry a code change.' -ForegroundColor Red
+            Write-Host ("          worktree {0}" -f $tree) -ForegroundColor Red
+            Write-Host ("          HEAD     {0}" -f $head) -ForegroundColor Red
+            Write-Host  '          Uncommitted artefact change. Commit it with the' -ForegroundColor Red
+            Write-Host  '          matching Publish-Step script first.' -ForegroundColor Red
             $allOk = $false
         } else {
-            Write-Host ("  ok    {0,-40} {1}" -f $rel, $md5) -ForegroundColor Green
+            Write-Host ("  ok    {0,-40} {1}" -f $rel, $head.Substring(0, 12)) -ForegroundColor Green
         }
     }
 
@@ -176,7 +188,7 @@ try {
     # -------------------------------------------------------- assemble the list
     $toStage = @('.gitignore')
     if (-not $GitignoreOnly) {
-        Get-ChildItem -LiteralPath $PluginRepo -Filter 'Publish-Step*.ps1' -File |
+        Get-ChildItem -LiteralPath $PluginRepo -Filter 'Publish-*.ps1' -File |
             Sort-Object Name |
             ForEach-Object { $toStage += $_.Name }
     }
@@ -258,7 +270,7 @@ which they are not from a fresh clone while the scripts are local-only.
 
     # The artefacts must still hash-match HEAD. If .gitattributes stopped
     # applying, this catches it here rather than on the next SFTP deploy.
-    foreach ($rel in $Frozen.Keys | Sort-Object) {
+    foreach ($rel in $Frozen) {
         $tree = (& git hash-object --no-filters -- $rel).Trim()
         Assert-Git 'hash-object'
         $head = (& git rev-parse "HEAD:$rel").Trim()
