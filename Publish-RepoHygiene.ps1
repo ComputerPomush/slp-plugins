@@ -6,16 +6,19 @@
 .DESCRIPTION
     Publish-Step7.ps1 line 223 builds $toStage from two slp_avalon/ artefacts
     plus $TestFiles. Neither .gitignore nor Publish-Step<N>.ps1 has ever been
-    in that list, in any Step script, so both have accumulated as working-tree
-    noise across v0.0.8 through v0.0.11. Handoff rev 8 section 1 nevertheless
-    lists "Publish-Step4..7.ps1" under "Repo root - committed", which the
-    v0.0.11 transcript disproves: git status reports all four as untracked.
+    in that list, in any Step script, so both accumulated as working-tree noise
+    from v0.0.8 onward while handoff rev 8 section 1 listed the publish scripts
+    as committed.
 
-    This script closes that gap once, as its own commit, so it cannot be
-    confused with a version bump.
+    Most of that gap is now closed. A -Mode Verify run at v0.0.13 reports
+    .gitignore, Publish-Step3.ps1, Publish-Step3_1.ps1, Publish-Step4..8.ps1
+    and this script all tracked and clean, with Publish-Step9.ps1 the only
+    remaining untracked path. Expect this script to find little or nothing to
+    do; that is the intended end state, not a fault.
 
-    It refuses to run if the plugin artefacts differ from the v0.0.11 pins.
-    A hygiene commit must not silently carry a code change.
+    It refuses to run if the plugin artefacts differ from HEAD, NOT from a set
+    of pinned md5s - see the $Frozen comment below for why that distinction
+    matters. A hygiene commit must not silently carry a code change.
 
     Two checks that Publish-Step7.ps1 does not make:
 
@@ -40,11 +43,16 @@
     section 1 must then be corrected instead, because it claims otherwise.
 
 .PARAMETER NormalizeTrailingNewline
-    OFF by default, so bytes are preserved. The working-tree .gitignore is
-    5 bytes, "*.log", with NO trailing newline. That works, but any later
-    Add-Content or `echo >>` concatenates onto the *.log line instead of
+    OFF by default, so bytes are preserved. Now a no-op in practice: as of
+    v0.0.13 the working-tree .gitignore is 6 bytes, "*.log" plus a trailing
+    LF, and HEAD's copy matches. It was 5 bytes with no trailing newline when
+    this switch was written.
+
+    Kept because the hazard is real and recurs. Without a trailing newline any
+    later Add-Content or `echo >>` concatenates onto the *.log line instead of
     starting a new one, silently producing a pattern like "*.logbuild/out".
-    Pass this switch to append a single LF first.
+    style.css has exactly this shape today - 218,328 bytes ending in a closing
+    brace - so the same care applies during the cosmetic pass.
 
 .EXAMPLE
     .\Publish-RepoHygiene.ps1 -Mode Verify
@@ -241,18 +249,41 @@ try {
         exit 0
     }
 
-    & git commit -m 'repo: commit .gitignore and the Publish-Step scripts' -m @'
-Neither path has ever appeared in a Publish-Step script's $toStage list, so
-both have sat in the working tree since v0.0.8 while handoff rev 8 section 1
-listed Publish-Step4..7.ps1 as committed. The v0.0.11 transcript shows all
-four untracked and .gitignore modified.
+    & git commit -m 'repo: track Publish-Step9.ps1, correct four stale claims in the tooling' -m @'
+Publish-Step9.ps1 is the last repo-root script still untracked. .gitignore and
+Publish-Step3..Step8 were committed earlier; a -Mode Verify run at v0.0.13
+reports every one of them clean and Step9 as untracked.
 
-No slp_avalon/ artefact is touched: the three v0.0.11 md5s are asserted
-unchanged before staging.
+Four prose corrections ride with it. No logic changes anywhere.
 
-Publish-Step<N>.ps1 is the tooling that produces every md5, CRLF and suite
-claim in the handoff. Decision 28 requires those claims to be reproducible,
-which they are not from a fresh clone while the scripts are local-only.
+Publish-Step9.ps1 - the -Mode Tag client checklist had three items that could
+not pass as written and was missing a fourth. Item 4 expected a fresh load to
+reproduce a manual search's result count, which Issue 22 makes impossible: the
+first load of a page goes out as csl_ajax_onload and honours radius, every
+later search goes as csl_ajax_search and does not. Item 5 asked for a
+dealerless search, which Decision 29's uncapped backfill makes unreachable.
+Item 6 called the address bar "clean" after a Tijuana rejection, when
+constraint C1 requires every attribution key to survive. The all-caps MICHIGAN
+case was absent. Replaced with the seven items from handoff rev 10 section 8.
+
+Publish-Step9.ps1 - the tag refusal printed "Not tagged." with no diagnostic
+after a lowercase yes, three times in a row. It now prints what it expected
+and what it received.
+
+Publish-RepoHygiene.ps1 - the description claimed .gitignore and every
+Publish-Step script were untracked, and that the artefact check compares
+against the v0.0.11 md5 pins. It compares against HEAD, which is what stopped
+it going stale at v0.0.12. -NormalizeTrailingNewline described a 5-byte
+.gitignore with no trailing newline; it is 6 bytes with one, so the switch is
+now a no-op.
+
+test/suite-core.js - the territory_boxes() line reference read 1103-1122,
+exact at v0.0.11 and stale since build-v012.py inserted 141 lines above the
+method. It is 1244-1263 at v0.0.13, and the comment now says the method name
+is the anchor rather than the range.
+
+No slp_avalon/ artefact is touched: all three are asserted byte-identical to
+HEAD before staging.
 '@
     Assert-Git 'commit'
 

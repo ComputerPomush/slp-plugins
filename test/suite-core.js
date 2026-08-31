@@ -74,9 +74,15 @@ eq(co(undefined), null, "undefined result yields null");
 
 /* --------------------------------------------- boxes mirror the PHP source */
 
-/* Values transcribed from SLP_Avalon::territory_boxes(),
-   slp_avalon/inc/class.slp_avalon.php 1103-1122. If this fails, one side was
-   edited without the other. */
+/* Values transcribed from SLP_Avalon::territory_boxes(), at
+   slp_avalon/inc/class.slp_avalon.php 1244-1263 as of v0.0.13.
+
+   The method name is the anchor, not the range. This comment read 1103-1122
+   until v0.0.12, which was exact at v0.0.11 and went stale the moment
+   build-v012.py inserted the provinces and their helpers 141 lines above the
+   method. Re-measure by grep after any edit; never adjust the offset by hand.
+
+   If this fails, one side was edited without the other. */
 const PHP_BOXES = [
   ["CONUS + Canada", 24.4, 83.2, -141.0, -52.0],
   ["Alaska", 51.0, 71.6, -173.0, -129.0],
