@@ -221,6 +221,7 @@
     user_initiated: false,
     original_geocode_response: null,
     original_send_ajax: null,
+    original_get_from_server: null,
     layout_normalized: false,
     sidebar_default: null,
 
@@ -349,35 +350,66 @@
             '<i class="fa fa fa-compass fa-spin fa-3x"></i></div>'
         );
       }
+      this.ensure_guard_css();
     },
 
-    /* ---------------------------------------------- notification channel */
+    /* ------------------------------------------------ injected stylesheet */
 
     /**
-     * Deliberately a separate channel from .get_my_position_notification,
-     * which is owned by handle_geolocation_error(): that function removes the
-     * node wholesale on its success path and would silently wipe ours.
-     * Injected rather than added to style.css because slp_avalon.js is
-     * repo-managed and identical on all three sites, while style.css is
-     * per-site and diverges.
+     * One injected style block for every rule the Guard owns. Injected
+     * rather than added to style.css because slp_avalon.js is repo-managed
+     * and identical on all three sites, while style.css is per-site and
+     * diverges - four distinct md5s across the six environments as of
+     * v0.0.8. That is decision 6.
+     *
+     * The notification is deliberately a separate channel from
+     * .get_my_position_notification, which is owned by
+     * handle_geolocation_error(): that function removes the node wholesale
+     * on its success path and would silently wipe ours.
+     *
+     * Called from ensure_spinner(), notify() and set_no_results(), so it is
+     * in place before any of the three surfaces is first painted. One
+     * guarded injector rather than three near-identical ones, which would
+     * be three places to forget.
      */
-    ensure_notification_css: function () {
-      if (jQuery("style.avalon_search_notification_css").length === 0) {
-        jQuery("head").append(
-          jQuery(
-            "<style class='avalon_search_notification_css'>" +
-              ".avalon_search_notification{color:#c00;font-size:13px;" +
-              "display:block;margin:0 0 8px;padding-top:30px;" +
-              "line-height:1.35;}" +
-              "</style>"
-          )
-        );
-      }
+    ensure_guard_css: function () {
+      if (jQuery("style.avalon_guard_css").length > 0) return;
+      jQuery("head").append(
+        jQuery(
+          "<style class='avalon_guard_css'>" +
+            //Territory and error copy above the field. #c00 measures about
+            //3.4:1 against the #090909 section background that Elementor
+            //sets on the locator (post-28743.css), which fails WCAG AA for
+            //13px text. #E7167C is about 4.55:1 and is already this page's
+            //focus colour, so the palette does not grow.
+            ".avalon_search_notification{color:#E7167C;font-size:13px;" +
+            "display:block;margin:0 0 8px;padding-top:30px;" +
+            "line-height:1.35;}" +
+            //Issue 12. The neutral prompt re-emitted into #map_sidebar by
+            //set_no_results(). Every other visible element in that panel
+            //sets #FFFFFF explicitly; a bare div inherits the theme body
+            //colour and is unreadable on #090909. Visible on Layer 1
+            //rejections since v0.0.6, and on Layer 3 rejections from
+            //v0.0.8, because install_options_hook() stops SLP painting
+            //over it.
+            ".avalon_sidebar_prompt{color:#FFFFFF;font-size:16px;" +
+            "line-height:24px;font-family:var(--body-font-family);" +
+            "padding:16px 0;}" +
+            //The spinner icon is placed at left/top 50% with no transform,
+            //so it hangs below and right of true centre by half its own
+            //size. The offending rule is in all four theme stylesheets and
+            //SLP ships none, so it is corrected here rather than in four
+            //divergent files. ID selector, so this wins on specificity
+            //rather than on source order.
+            "#sl_loading_indicator i{transform:translate(-50%,-50%);}" +
+            "</style>"
+        )
+      );
     },
 
     notify: function (message) {
       if (!message) return;
-      this.ensure_notification_css();
+      this.ensure_guard_css();
       var $existing = jQuery(".avalon_search_notification");
       if ($existing.length > 0) {
         $existing.text(message);
@@ -437,6 +469,7 @@
     set_no_results: function (on) {
       jQuery("#sl_div").toggleClass("avalon_no_results", !!on);
       if (!on) return;
+      this.ensure_guard_css();
       var sidebar = document.getElementById("map_sidebar");
       if (!sidebar || this.sidebar_default === null) return;
       var prompt = document.createElement("div");
@@ -582,17 +615,82 @@
             callback(response);
           })
           .fail(function () {
-            // Correction, v0.0.6: send_ajax is NOT shared with
+            // Correction, v0.0.8: send_ajax is NOT shared with
             // slp.option.get_from_server, which issues its own jQuery.getJSON
-            // (slp_core.js:848). slp_core.js:1849 is its only caller in the
-            // file. The state guard stays regardless: it costs nothing and it
-            // holds if a future SLP release routes anything else through here.
+            // (slp_core.js:848). It IS shared with SLPEXP.email_form.send_email
+            // in slp-experience_userinterface.min.js, which is enqueued on this
+            // page - so this guard is load-bearing today, not insurance. It is
+            // also not sufficient: an email_form POST that fails WHILE a search
+            // is in flight passes this check and aborts a healthy search.
+            // v0.0.9 replaces the state test with an action.action test.
             if (guard.state !== guard.SEARCHING) return;
             guard.finish(guard.ERROR, {
               message: AVALON_GUARD_MESSAGES.transport,
               focus_input: guard.user_initiated,
             });
           });
+      };
+    },
+
+    /**
+     * Layer 3 presentation, handoff s7.4.
+     *
+     * putMarkers() blanks #map_sidebar (slp_core.js:1317) and then, when the
+     * marker count is zero, fetches message_no_results at 1328 and writes it
+     * at 1330. That fetch is a jQuery.getJSON, so it always resolves AFTER
+     * location_search_processed publishes at 1911 - which means it lands on
+     * top of the neutral prompt that finish() -> set_no_results(true) has
+     * just written, and the visitor reads 'No Dealers found in this area,
+     * please try again!' underneath a message saying we do not serve that
+     * area at all. Issue 4.
+     *
+     * Suppressed at source rather than with a CSS class: a class would
+     * reintroduce the three-site style.css deliverable decision 6 exists to
+     * avoid, and would leave a 670px void beside the map at desktop.
+     *
+     * Scoped to message_no_results ONLY. slp_core.js:1600 routes
+     * message_bad_address through this same function and must keep working.
+     * Do not broaden it.
+     *
+     * Scoped to territory rejections ONLY, not to EMPTY. On a genuine
+     * in-territory empty result SLP's copy is the more useful of the two,
+     * and the uncapped backfill (decision 13) makes that case near
+     * unreachable anyway. Decision 21.
+     *
+     * The short-circuit is synchronous, mirroring SLP's own
+     * shortcode_attributes shortcut at slp_core.js:842-845. Deferring it
+     * would put the write back after set_no_results() and restore the race.
+     *
+     * NOTE: the file the browser executes is slp_core.min.js, not
+     * slp_core.js. Every property wrapped here was verified present and
+     * semantically identical in the minified build before this was written.
+     */
+    install_options_hook: function () {
+      if (this.original_get_from_server !== null) return;
+      if (
+        typeof slp === "undefined" ||
+        typeof slp.option === "undefined" ||
+        typeof slp.option.get_from_server !== "function"
+      ) {
+        return;
+      }
+      var guard = this;
+      var original = slp.option.get_from_server;
+      this.original_get_from_server = original;
+
+      slp.option.get_from_server = function (option_name, callback) {
+        if (
+          option_name === "message_no_results" &&
+          guard.last_response &&
+          guard.last_response.avalon_territory_rejected &&
+          typeof callback === "function"
+        ) {
+          //slp_core.js:1334 - a falsy value takes the else branch, which
+          //logs and writes nothing. The prompt survives.
+          callback({ value: "" });
+          return;
+        }
+        return original.call(slp.option, option_name, callback);
       };
     },
 
@@ -897,6 +995,10 @@
       //Issue 1 Path B. slp.run has already executed by map-ready, so
       //slp.send_ajax is defined and safe to replace here.
       avalon_guard.install_transport_hook();
+      //Issue 4 / Layer 3 presentation. slp.option is a plain property on
+      //the slp object literal (slp_core.js:839) and exists well before
+      //map-ready, so this is safe here beside the transport hook.
+      avalon_guard.install_options_hook();
       //Fallback only - both ran at DOM-ready and both are guarded, so this
       //pair is a no-op in the normal case.
       avalon_guard.capture_sidebar_default();
