@@ -193,6 +193,42 @@
   var AVALON_SEARCHABLE = /[A-Za-z0-9\u00C0-\u024F]/;
 
   /**
+   * Issue 25. Remove the two characters that would truncate the geocode
+   * proxy URL before it leaves the browser.
+   *
+   * slp_core.js:806 builds that URL with encodeURI(), which does not
+   * escape "#" or "?" - both are in the reserved set it leaves alone on
+   * purpose. Both are structural in a URL: "#" opens a fragment, which
+   * the browser never sends, and "?" opens a query string, which ends the
+   * path segment the proxy reads the address out of. So
+   * "1200 Woodward Ave #4, Detroit, MI" reaches Google as
+   * "1200 Woodward Ave " - no suite, no city, no state.
+   *
+   * Replaced with a space rather than deleted, so "#4" becomes "4"
+   * instead of vanishing. Google geocodes to the building and ignores a
+   * suite number either way; the space is simply the smaller change.
+   *
+   * The early return is not tidiness. Almost every search contains
+   * neither character, and a function that rewrote every address would be
+   * much harder to reason about the next time a geocode returns something
+   * unexpected. Same shape as clean_url()'s no-op test, same reason.
+   *
+   * Cannot be handed a string that cleans down to nothing: a bare "#" or
+   * "?" has no letter or digit, so AVALON_SEARCHABLE rejects it at Layer
+   * 0 and it never reaches a geocode.
+   */
+  function avalon_geocode_safe(address) {
+    if (typeof address !== "string") return address;
+    if (address.indexOf("#") === -1 && address.indexOf("?") === -1) {
+      return address;
+    }
+    return address
+      .replace(/[#?]/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  /**
    * Read the ISO country code out of a geocoder result or a Places result.
    *
    * Returns null when there is no usable country component. That null is the
@@ -1189,15 +1225,29 @@
     slp_Filter("map_built").publish();
   }
   function avalon_init_gmaps() {
-    //Search by ZIP if search text is only numbers
-    // slp_Filter("geocoder_request").subscribe(function (request) {
-    //   console.log({ request });
-    //   if (request["address"].isNumber()) {
-    //     let zip = request["address"];
-    //     request["address"] = `${zip}&components=country:RO`;
-    //     // request["components"] = `postal_code:${zip}`;
-    //   }
-    // });
+    //Issue 25. SLP publishes the geocoder request at slp_core.js:1647 and
+    //geocodes it at 1649, so a subscriber that mutates .address here is
+    //the last thing to touch the string before it goes out. This is SLP's
+    //own extension point; the alternative was wrapping
+    //slp.geocoder.geocode the way install_transport_hook wraps
+    //slp.send_ajax, which is more machinery for the same result.
+    //
+    //store-locator-le/js/slp_core.js is the hard constraint and is never
+    //edited, so the encodeURI() call at 806 cannot be corrected in place.
+    //
+    //Only the string sent to Google changes. #addressInput keeps what the
+    //visitor typed and the place_address parameter composed in
+    //cslmap_searchLocations() is untouched, so a successful search still
+    //shares as the address they actually entered.
+    //
+    //A commented-out ZIP/Romania example subscribed to this same filter
+    //here for years without ever being enabled. Removed in v0.0.14 rather
+    //than left beside this, where it would read as a second attempt at
+    //the same job.
+    slp_Filter("geocoder_request").subscribe(function (request) {
+      if (!request) return;
+      request.address = avalon_geocode_safe(request.address);
+    });
     //Overwrite search function
     slp_Filter("slp_map_ready").subscribe(function (cslmap) {
       avalon_cslmap = cslmap;
