@@ -67,6 +67,22 @@ if (!class_exists('SLP_Avalon')){
             // touch the payload and cannot be refilled by a later filter.
             // Registered with add_filter, not add_action: this IS a filter.
             add_filter('slp_ajax_find_locations_complete',array(self::$instance,'territory_gate'),20,1);
+            // SLP Dealer Guard, import hygiene. Issue 26 and Issue 27.
+            //
+            // Priority 20 is forced, not chosen. SLP Power's
+            // prepare_for_import() puts add_sl_to_base_fieldnames on this
+            // hook at 8 - that callback is what creates the sl_* keys we
+            // read - strip_extra_spaces_from_csv_location_data at 10, and
+            // create_categories_from_location_data at 30. Run before 8 and
+            // there is nothing to read; run after 30 and we are fighting
+            // the category manager.
+            add_filter('slp_csv_locationdata',array(self::$instance,'avalon_import_coordinate_guard'),20,1);
+            //
+            // Priority 500 on completion: after csv_processing_complete_func
+            // at 10 has finished reconciling the table against the CSV, and
+            // before remove_old_csv_files_after_import at 999 clears the
+            // working directory out from under us.
+            add_action('slp_csv_processing_complete',array(self::$instance,'avalon_flush_import_log'),500);
         }
 
         private function register_shortcodes(){
@@ -371,24 +387,464 @@ if (!class_exists('SLP_Avalon')){
             return $angle * $earthRadius;
         }
 
-        //This function should geocode a vendor before it is added to the database
-        //If the default geocoding doesn't work, uncomment the line below to activate the custom geocoding
-        //add_filter('slp_csv_locationdata', array(self::$instance,'add_lat_lng_before_csv_import'));
-        public function add_lat_lng_before_csv_import($location_data)
-        {
-            // return $location_data;
-            $lat = (int)$location_data['sl_latitude'];
-            $lng = (int)$location_data['sl_longitude'];
-            if (!$lat || !$lng) {
-                //We need to geolocate
-                $address = implode(",", array_filter(array($location_data['sl_address'], $location_data['sl_city'], $location_data['sl_state'], $location_data['sl_zip'], $location_data['sl_country'])));
-                $geocode_response = $this->geocode_from_address($address);
-                if ($geocode_response['success']) {
-                    $location_data['sl_latitude'] = $geocode_response['lat'];
-                    $location_data['sl_longitude'] = $geocode_response['lng'];
+        /**
+         * Import coordinate hygiene. Filter on slp_csv_locationdata, prio 20.
+         *
+         * Runs once per CSV row, on both the manual upload and the nightly
+         * cron - they converge on SLP_Power_Locations_Import::import() at 307,
+         * so there is one code path here, not two.
+         *
+         * Tier 1  coordinates absent, blank, non-numeric, out of range or
+         *         exactly 0,0     -> geocode from the address and write.
+         * Tier 2  coordinates sane but disagreeing with their own address by
+         *         at least the correction threshold -> geocode wins.
+         *         Between the observation floor and the threshold, nothing is
+         *         written and the disagreement is logged.
+         *
+         * This runs BEFORE add_to_database() at 864, so it does not matter
+         * what skip_geocoding holds - we geocode for ourselves.
+         *
+         * @param  mixed[] $location_data
+         * @return mixed[]
+         */
+        public function avalon_import_coordinate_guard($location_data){
+            $cfg = $this->avalon_import_config();
+
+            $store = $this->avalon_field($location_data, 'sl_store');
+            if ($store === '') {
+                $store = $this->avalon_field($location_data, 'name');
+            }
+            $city  = $this->avalon_field($location_data, 'sl_city');
+            $state = $this->avalon_field($location_data, 'sl_state');
+
+            // SLP backfills a missing sl_latitude with '' at line 850, one
+            // line after this filter, so at priority 20 the key can genuinely
+            // be absent. Never index it unguarded.
+            $lat_raw = $this->avalon_field($location_data, 'sl_latitude');
+            $lng_raw = $this->avalon_field($location_data, 'sl_longitude');
+
+            $address = implode(', ', array_filter(array(
+                $this->avalon_field($location_data, 'sl_address'),
+                $this->avalon_field($location_data, 'sl_address2'),
+                $city,
+                $state,
+                $this->avalon_field($location_data, 'sl_zip'),
+                $this->avalon_field($location_data, 'sl_country')
+            )));
+
+            // Nothing to geocode against. Leave the row exactly as it came in.
+            if ($address === '') {
+                return $location_data;
+            }
+
+            $sane = $this->avalon_coord_is_sane($lat_raw, $lng_raw);
+            $tier = $sane ? 2 : 1;
+
+            if ($tier === 1 && ! $cfg['tier1']) {
+                return $location_data;
+            }
+            if ($tier === 2 && ! $cfg['tier2']) {
+                return $location_data;
+            }
+
+            // The correction cap is a circuit breaker, not a quota. Once it
+            // trips, Tier 2 is done for this import - a systemic failure that
+            // wants to move 200 rows must not be allowed to move the first 25
+            // and then stop half way.
+            if ($tier === 2 && $this->avalon_state('tier2_aborted')) {
+                return $location_data;
+            }
+
+            if ($tier === 2 && $this->avalon_tier2_is_excluded($store, $city, $state)) {
+                $this->avalon_state_bump('excluded');
+                $this->avalon_note_exclusion_hit($store, $city, $state);
+                return $location_data;
+            }
+
+            $geo = $this->avalon_geocode_cached($address);
+            if (! $geo['success']) {
+                $this->avalon_import_log(array(
+                    'tier'   => $tier,
+                    'action' => 'geocode_failed',
+                    'store'  => $store,
+                    'where'  => $city . ', ' . $state,
+                    'reason' => $geo['error']
+                ));
+                return $location_data;
+            }
+
+            // A geocode that lands outside served territory is rejected on the
+            // same predicate Layer 3 applies to search results. 0,0 is the
+            // Gulf of Guinea and is refused here, which is defect 4.
+            if (! $this->is_in_territory($geo['lat'], $geo['lng'])) {
+                $this->avalon_import_log(array(
+                    'tier'   => $tier,
+                    'action' => 'rejected_out_of_territory',
+                    'store'  => $store,
+                    'where'  => $city . ', ' . $state,
+                    'to'     => $geo['lat'] . ',' . $geo['lng']
+                ));
+                return $location_data;
+            }
+
+            if ($tier === 1) {
+                $location_data['sl_latitude']  = $geo['lat'];
+                $location_data['sl_longitude'] = $geo['lng'];
+                $this->avalon_state_bump('tier1_written');
+                $this->avalon_import_log(array(
+                    'tier'   => 1,
+                    'action' => 'geocoded',
+                    'store'  => $store,
+                    'where'  => $city . ', ' . $state,
+                    'from'   => $lat_raw . ',' . $lng_raw,
+                    'to'     => $geo['lat'] . ',' . $geo['lng']
+                ));
+                return $location_data;
+            }
+
+            $miles = $this->vincentyGreatCircleDistance(
+                (float) $lat_raw, (float) $lng_raw,
+                (float) $geo['lat'], (float) $geo['lng']
+            ) / 1609.344;
+
+            if ($miles < $cfg['observe_mi']) {
+                return $location_data;   // ordinary geocoder disagreement
+            }
+
+            if ($miles < $cfg['correct_mi']) {
+                $this->avalon_state_bump('observed');
+                $this->avalon_import_log(array(
+                    'tier'   => 2,
+                    'action' => 'observed_not_corrected',
+                    'store'  => $store,
+                    'where'  => $city . ', ' . $state,
+                    'miles'  => round($miles, 2),
+                    'from'   => $lat_raw . ',' . $lng_raw,
+                    'to'     => $geo['lat'] . ',' . $geo['lng']
+                ));
+                return $location_data;
+            }
+
+            if ($this->avalon_state('tier2_written') >= $cfg['max_corrections']) {
+                $this->avalon_state_set('tier2_aborted', true);
+                $this->avalon_import_log(array(
+                    'tier'   => 2,
+                    'action' => 'ABORTED_correction_cap',
+                    'store'  => $store,
+                    'where'  => $city . ', ' . $state,
+                    'reason' => 'cap of ' . $cfg['max_corrections'] . ' reached; '
+                                . 'no further Tier 2 writes this import'
+                ));
+                return $location_data;
+            }
+
+            $location_data['sl_latitude']  = $geo['lat'];
+            $location_data['sl_longitude'] = $geo['lng'];
+            $this->avalon_state_bump('tier2_written');
+            $this->avalon_import_log(array(
+                'tier'   => 2,
+                'action' => 'corrected',
+                'store'  => $store,
+                'where'  => $city . ', ' . $state,
+                'miles'  => round($miles, 2),
+                'from'   => $lat_raw . ',' . $lng_raw,
+                'to'     => $geo['lat'] . ',' . $geo['lng']
+            ));
+
+            return $location_data;
+        }
+
+        /**
+         * Read a key that may not exist yet, trimmed, as a string.
+         *
+         * add_sl_to_base_fieldnames copies a CSV value to its sl_ key only
+         * when ! empty(), and empty('0') is true in PHP, so both a blank cell
+         * and a cell holding a bare 0 leave the sl_ key undefined.
+         */
+        private function avalon_field($location_data, $key){
+            if (! isset($location_data[$key])) {
+                return '';
+            }
+            if (is_array($location_data[$key]) || is_object($location_data[$key])) {
+                return '';
+            }
+            return trim((string) $location_data[$key]);
+        }
+
+        /**
+         * Are these coordinates usable as they stand?
+         *
+         * Deliberately NOT the (int) cast the previous revision used.
+         * (int)"-9838239.000000000" is -9838239, which is truthy, so the one
+         * genuinely broken longitude in the Aura feed passed the old gate
+         * untouched. A blank, a non-number, anything outside the physical
+         * range, and exactly 0,0 all count as unusable.
+         */
+        private function avalon_coord_is_sane($lat, $lng){
+            if (! is_numeric($lat) || ! is_numeric($lng)) {
+                return false;
+            }
+            $lat = (float) $lat;
+            $lng = (float) $lng;
+            if (! is_finite($lat) || ! is_finite($lng)) {
+                return false;
+            }
+            if ($lat < -90.0 || $lat > 90.0 || $lng < -180.0 || $lng > 180.0) {
+                return false;
+            }
+            if ($lat === 0.0 && $lng === 0.0) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * Import hygiene configuration.
+         *
+         * Every value is overridable from wp-config.php, so a single site can
+         * be changed without a deploy and without touching the other five.
+         * The defaults are the shipped behaviour.
+         */
+        public function avalon_import_config(){
+            return array(
+                'tier1'           => defined('AVALON_IMPORT_GEOCODE_TIER1')
+                                     ? (bool)  AVALON_IMPORT_GEOCODE_TIER1   : true,
+                'tier2'           => defined('AVALON_IMPORT_GEOCODE_TIER2')
+                                     ? (bool)  AVALON_IMPORT_GEOCODE_TIER2   : true,
+                'correct_mi'      => defined('AVALON_TIER2_CORRECT_MI')
+                                     ? (float) AVALON_TIER2_CORRECT_MI       : 10.0,
+                'observe_mi'      => defined('AVALON_TIER2_OBSERVE_MI')
+                                     ? (float) AVALON_TIER2_OBSERVE_MI       : 2.0,
+                'max_corrections' => defined('AVALON_TIER2_MAX_CORRECTIONS')
+                                     ? (int)   AVALON_TIER2_MAX_CORRECTIONS  : 25,
+                'geocode_budget'  => defined('AVALON_IMPORT_GEOCODE_BUDGET')
+                                     ? (int)   AVALON_IMPORT_GEOCODE_BUDGET  : 150,
+                'timeout'         => defined('AVALON_IMPORT_GEOCODE_TIMEOUT')
+                                     ? (int)   AVALON_IMPORT_GEOCODE_TIMEOUT : 8,
+            );
+        }
+
+        /**
+         * Rows Tier 2 must never move.
+         *
+         * DONNIE MARCH, Howell MI, carries I-94 Marine's Belleville
+         * coordinates - the two rows are 0.52 metres apart and share
+         * identifier CDMII9114. Correcting it would publish a private
+         * residence as a dealer location. Suppressing it instead would delete
+         * the record that same night, because csv_processing_complete_func()
+         * removes every location whose hash is absent from
+         * avalon_updated_slp_locations, and currentLocation->delete() leaves
+         * the store_page post orphaned: the Aura DEV sitemap carries 321
+         * entries against 308 records, and I-94 Marine alone holds three
+         * permalinks from exactly that delete-and-recreate churn. So it stays.
+         *
+         * C/O Cole International USA is a customs broker in Pembina ND acting
+         * for a dealer in Lac Du Bonnet MB. The stored coordinates are the
+         * dealer's, the address is the broker's, and neither is wrong enough
+         * to overwrite the other.
+         *
+         * Matched on store + city + state so a zip or whitespace fix in the
+         * feed cannot silently un-exclude a row. avalon_flush_import_log()
+         * warns when an entry stops matching anything at all, which is the
+         * signal that a dealer was renamed and the decision needs revisiting.
+         */
+        public function avalon_tier2_exclusions(){
+            return array(
+                'DONNIE MARCH|HOWELL|MI',
+                'C/O COLE INTERNATIONAL USA|PEMBINA|ND',
+            );
+        }
+
+        private function avalon_exclusion_key($store, $city, $state){
+            $norm = function ($v) {
+                return preg_replace('/\s+/', ' ', strtoupper(trim((string) $v)));
+            };
+            return $norm($store) . '|' . $norm($city) . '|' . $norm($state);
+        }
+
+        private function avalon_tier2_is_excluded($store, $city, $state){
+            return in_array(
+                $this->avalon_exclusion_key($store, $city, $state),
+                $this->avalon_tier2_exclusions(),
+                true
+            );
+        }
+
+        private function avalon_note_exclusion_hit($store, $city, $state){
+            $key = $this->avalon_exclusion_key($store, $city, $state);
+            $hit = $this->avalon_state('exclusion_hits');
+            if (! is_array($hit)) {
+                $hit = array();
+            }
+            $hit[$key] = true;
+            $this->avalon_state_set('exclusion_hits', $hit);
+        }
+
+        /**
+         * Geocode an address, cached, inside a per-import budget.
+         *
+         * The cache is a single non-autoloaded option keyed on the md5 of the
+         * normalised address, so a steady-state import performs zero network
+         * calls and a single delete_option() clears it. The budget bounds how
+         * much a cold cache can add to one import: Aura needs 308 geocodes
+         * from cold, which at the configured timeout is a worst case far
+         * longer than any cron run should take. Rows beyond the budget are
+         * simply not corrected tonight; the cache warms over two or three
+         * imports and completes itself.
+         */
+        private function avalon_geocode_cached($address){
+            $key   = md5(preg_replace('/\s+/', ' ', strtoupper(trim($address))));
+            $cache = $this->avalon_state('geocode_cache');
+
+            if (! is_array($cache)) {
+                $cache = get_option('avalon_geocode_cache');
+                if (! is_array($cache)) {
+                    $cache = array();
+                }
+                $this->avalon_state_set('geocode_cache', $cache);
+            }
+
+            if (isset($cache[$key]['lat'], $cache[$key]['lng'])) {
+                return array(
+                    'success' => true,
+                    'lat'     => $cache[$key]['lat'],
+                    'lng'     => $cache[$key]['lng']
+                );
+            }
+
+            $cfg = $this->avalon_import_config();
+            if ($this->avalon_state('geocodes_spent') >= $cfg['geocode_budget']) {
+                return array('success' => false, 'error' => 'geocode budget exhausted');
+            }
+
+            $this->avalon_state_bump('geocodes_spent');
+            $geo = $this->geocode_from_address($address);
+
+            if (! empty($geo['success'])) {
+                $cache[$key] = array(
+                    'lat' => $geo['lat'],
+                    'lng' => $geo['lng'],
+                    'ts'  => time()
+                );
+                $this->avalon_state_set('geocode_cache', $cache);
+                $this->avalon_state_set('cache_dirty', true);
+            }
+
+            return $geo;
+        }
+
+        /**
+         * Per-import scratch state. Held on the instance, never in a global.
+         */
+        private $avalon_import_state = null;
+
+        private function avalon_state($key){
+            if (! is_array($this->avalon_import_state)) {
+                $this->avalon_import_state = array();
+            }
+            if (! isset($this->avalon_import_state[$key])) {
+                return 0;
+            }
+            return $this->avalon_import_state[$key];
+        }
+
+        private function avalon_state_set($key, $value){
+            if (! is_array($this->avalon_import_state)) {
+                $this->avalon_import_state = array();
+            }
+            $this->avalon_import_state[$key] = $value;
+        }
+
+        private function avalon_state_bump($key){
+            $this->avalon_state_set($key, ((int) $this->avalon_state($key)) + 1);
+        }
+
+        /**
+         * Record one override.
+         *
+         * error_log() goes to WP Engine's PHP log, outside the web root -
+         * rev12 s10.6 records what happened the last time this plugin wrote a
+         * log under get_stylesheet_directory(). The bounded copy in an option
+         * is what the acceptance test reads, since the PHP log rotates and is
+         * noisy. Written immediately to the log, batched to the option, so a
+         * respawned import cannot lose the whole record.
+         */
+        private function avalon_import_log($record){
+            $line = 'SLP Dealer Guard import: ' . wp_json_encode($record);
+            error_log($line);
+
+            $buf = $this->avalon_state('log_buffer');
+            if (! is_array($buf)) {
+                $buf = array();
+            }
+            $buf[] = $record;
+            $this->avalon_state_set('log_buffer', $buf);
+
+            if (count($buf) >= 20) {
+                $this->avalon_flush_import_log(false);
+            }
+        }
+
+        /**
+         * Flush the override log and the geocode cache.
+         *
+         * Hooked to slp_csv_processing_complete at 500 - after the reconcile
+         * at 10, before the working directory is cleared at 999. Also called
+         * mid-import when the buffer fills.
+         *
+         * @param bool $final True at end of import: writes the run summary and
+         *                    warns about exclusions that matched nothing.
+         */
+        public function avalon_flush_import_log($final = true){
+            $buf = $this->avalon_state('log_buffer');
+            if (is_array($buf) && ! empty($buf)) {
+                $stored = get_option('avalon_geocode_overrides');
+                if (! is_array($stored)) {
+                    $stored = array();
+                }
+                $stored = array_merge($stored, $buf);
+                if (count($stored) > 500) {
+                    $stored = array_slice($stored, -500);
+                }
+                update_option('avalon_geocode_overrides', $stored, 'no');
+                $this->avalon_state_set('log_buffer', array());
+            }
+
+            if ($this->avalon_state('cache_dirty')) {
+                $cache = $this->avalon_state('geocode_cache');
+                if (is_array($cache)) {
+                    update_option('avalon_geocode_cache', $cache, 'no');
+                }
+                $this->avalon_state_set('cache_dirty', false);
+            }
+
+            if (! $final) {
+                return;
+            }
+
+            $hits    = $this->avalon_state('exclusion_hits');
+            $missing = array();
+            foreach ($this->avalon_tier2_exclusions() as $entry) {
+                if (! is_array($hits) || ! isset($hits[$entry])) {
+                    $missing[] = $entry;
                 }
             }
-            return $location_data;
+
+            $summary = array(
+                'finished_utc'    => gmdate('c'),
+                'tier1_written'   => (int) $this->avalon_state('tier1_written'),
+                'tier2_written'   => (int) $this->avalon_state('tier2_written'),
+                'observed'        => (int) $this->avalon_state('observed'),
+                'excluded'        => (int) $this->avalon_state('excluded'),
+                'geocodes_spent'  => (int) $this->avalon_state('geocodes_spent'),
+                'tier2_aborted'   => (bool) $this->avalon_state('tier2_aborted'),
+                'stale_exclusions'=> $missing
+            );
+
+            error_log('SLP Dealer Guard import summary: ' . wp_json_encode($summary));
+            update_option('avalon_geocode_last_run', $summary, 'no');
+
+            $this->avalon_import_state = null;
         }
 
         public function geocode_from_address($address)
@@ -405,18 +861,40 @@ if (!class_exists('SLP_Avalon')){
             }
             $address = urlencode($address);
             $api_url = "https://maps.googleapis.com/maps/api/geocode/json?address={$address}&key={$server_key}";
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $api_url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            $output = curl_exec($ch);
-            curl_close($ch);
+            // wp_remote_get, not bare curl_exec. The previous revision set no
+            // CURLOPT_TIMEOUT at all, so a stalled Google connection could
+            // hang a cron import indefinitely with nothing in the log.
+            $timeout = defined('AVALON_IMPORT_GEOCODE_TIMEOUT')
+                ? (int) AVALON_IMPORT_GEOCODE_TIMEOUT
+                : 8;
+            $response = wp_remote_get($api_url, array(
+                'timeout'     => $timeout,
+                'redirection' => 2,
+                'sslverify'   => true
+            ));
+            if (is_wp_error($response)) {
+                $result['error'] = 'HTTP: ' . $response->get_error_message();
+                return $result;
+            }
+            $output = wp_remote_retrieve_body($response);
             $json = json_decode($output, true);
             if ($json) {
                 if ($json['status'] == 'OK') {
-                    if (isset($json['results'][0]['geometry'])) {
+                    if (isset($json['results'][0]['geometry']['location']['lat'],
+                              $json['results'][0]['geometry']['location']['lng'])) {
+                        $lat = $json['results'][0]['geometry']['location']['lat'];
+                        $lng = $json['results'][0]['geometry']['location']['lng'];
+                        // A geocoder that answers 0,0 has not found anything;
+                        // that is the Gulf of Guinea. Writing it back is how a
+                        // zero-coordinate row stays a zero-coordinate row.
+                        if (! is_numeric($lat) || ! is_numeric($lng)
+                            || ((float) $lat === 0.0 && (float) $lng === 0.0)) {
+                            $result['error'] = 'Geocoder returned 0,0 or a non-number';
+                            return $result;
+                        }
                         $result['success'] = true;
-                        $result['lat'] = $json['results'][0]['geometry']['location']['lat'];
-                        $result['lng'] = $json['results'][0]['geometry']['location']['lng'];
+                        $result['lat'] = $lat;
+                        $result['lng'] = $lng;
                         return $result;
                     } else {
                         $result['error'] = 'No Geomtry in geocoding response';
