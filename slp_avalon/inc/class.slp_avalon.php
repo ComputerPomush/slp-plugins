@@ -82,7 +82,7 @@ if (!class_exists('SLP_Avalon')){
             // at 10 has finished reconciling the table against the CSV, and
             // before remove_old_csv_files_after_import at 999 clears the
             // working directory out from under us.
-            add_action('slp_csv_processing_complete',array(self::$instance,'avalon_flush_import_log'),500);
+            add_action('slp_csv_processing_complete',array(self::$instance,'avalon_flush_import_log'),500,0);
         }
 
         private function register_shortcodes(){

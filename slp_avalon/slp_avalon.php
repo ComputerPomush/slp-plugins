@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Store Locator Plus Avalon
  * Description: Avalon Customization for SLP plugin
- * Version: 0.0.15
+ * Version: 0.0.16
  * Author: WildMedia
  */
 
