@@ -15,8 +15,8 @@
  * NO CONSTANTS ARE DEFINED BY THIS SUITE. PHP constants cannot be redefined,
  * so defining AVALON_TIER2_MAX_CORRECTIONS to something small would have meant
  * testing a configuration that never ships. The cap and the budget are instead
- * exercised by feeding enough synthetic rows to trip the real defaults - 30
- * rows for a cap of 25, 160 addresses for a budget of 150. Geocoding is
+ * exercised by feeding enough synthetic rows to trip the real defaults - 70
+ * rows for a cap of 60, 160 addresses for a budget of 150. Geocoding is
  * stubbed, so that costs nothing.
  *
  * NEGATIVE CONTROL, decision 20. Run against the v0.0.14 artefact FIRST and
@@ -432,12 +432,15 @@ ck($out['sl_latitude'] ?? null, '42.220530000', 'exclusion match ignores case an
 
 echo "\nRails\n";
 
-// [v15] Correction cap. 30 rows all 207 mi off; exactly 25 move, then the pass
-// aborts. A systemic failure must not half-rewrite the table.
+// [v15] Correction cap. 70 rows all 207 mi off; exactly 60 move, then the pass
+// aborts. The cap LATCHES; it does not roll back the 60 already written. It
+// bounds how far a systemic geocode failure can get, which is all it ever
+// did. v0.0.17 raised the default from 25: 17 corrections a night is a
+// permanent baseline, not an exceptional event. rev15 s5, rev16 s7.2.
 $g = reset_world();
 $GLOBALS['SUITE_GEO'] = ['CITY' => [$BASE_LAT, $BASE_LNG]];
 $moved = 0;
-for ($i = 0; $i < 30; $i++) {
+for ($i = 0; $i < 70; $i++) {
     $r = row([
         'sl_store'    => "STORE $i",
         'sl_city'     => "CITY $i",
@@ -447,7 +450,7 @@ for ($i = 0; $i < 30; $i++) {
     $out = guard($g, $r);
     if (($out['sl_latitude'] ?? null) === $BASE_LAT) { $moved++; }
 }
-ck($moved, 25, 'correction cap stops at exactly 25');
+ck($moved, 60, 'correction cap stops at exactly 60');
 flush_log($g);
 $sum = $GLOBALS['SUITE_OPTIONS']['avalon_geocode_last_run'] ?? [];
 ck($sum['tier2_aborted'] ?? null, true, 'the summary records the abort');
@@ -498,7 +501,7 @@ $g = reset_world();
 $cfg = method_exists($g, 'avalon_import_config') ? $g->avalon_import_config() : [];
 ck($cfg['correct_mi']      ?? null, 10.0, 'default correction threshold is 10 mi');
 ck($cfg['observe_mi']      ?? null, 2.0,  'default observation floor is 2 mi');
-ck($cfg['max_corrections'] ?? null, 25,   'default correction cap is 25');
+ck($cfg['max_corrections'] ?? null, 60,   'default correction cap is 60');
 ck($cfg['geocode_budget']  ?? null, 150,  'default geocode budget is 150');
 ck($cfg['tier1']           ?? null, true, 'Tier 1 defaults on');
 ck($cfg['tier2']           ?? null, true, 'Tier 2 defaults on');

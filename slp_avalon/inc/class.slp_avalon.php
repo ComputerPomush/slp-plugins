@@ -447,10 +447,13 @@ if (!class_exists('SLP_Avalon')){
                 return $location_data;
             }
 
-            // The correction cap is a circuit breaker, not a quota. Once it
-            // trips, Tier 2 is done for this import - a systemic failure that
-            // wants to move 200 rows must not be allowed to move the first 25
-            // and then stop half way.
+            // The correction cap is a circuit breaker, not a quota, and it
+            // LATCHES: once tier2_written reaches the cap, tier2_aborted is
+            // set and no further Tier 2 row is even compared for the rest of
+            // this import. It does NOT roll back. Corrections already made
+            // were written into $location_data row by row and are committed.
+            // The cap bounds how far a systemic geocode failure can get, not
+            // whether the pass is all-or-nothing - it never was.
             if ($tier === 2 && $this->avalon_state('tier2_aborted')) {
                 return $location_data;
             }
@@ -616,7 +619,7 @@ if (!class_exists('SLP_Avalon')){
                 'observe_mi'      => defined('AVALON_TIER2_OBSERVE_MI')
                                      ? (float) AVALON_TIER2_OBSERVE_MI       : 2.0,
                 'max_corrections' => defined('AVALON_TIER2_MAX_CORRECTIONS')
-                                     ? (int)   AVALON_TIER2_MAX_CORRECTIONS  : 25,
+                                     ? (int)   AVALON_TIER2_MAX_CORRECTIONS  : 60,
                 'geocode_budget'  => defined('AVALON_IMPORT_GEOCODE_BUDGET')
                                      ? (int)   AVALON_IMPORT_GEOCODE_BUDGET  : 150,
                 'timeout'         => defined('AVALON_IMPORT_GEOCODE_TIMEOUT')
@@ -792,15 +795,34 @@ if (!class_exists('SLP_Avalon')){
          * at 10, before the working directory is cleared at 999. Also called
          * mid-import when the buffer fills.
          *
+         * The first flush of a run ROTATES the override log: whatever
+         * avalon_geocode_overrides held from the previous import is moved to
+         * avalon_geocode_overrides_prev and the current option starts empty.
+         * Before v0.0.17 it accumulated every import forever - 405 entries and
+         * 86,712 bytes on Aura DEV after four runs - and every 20-entry flush
+         * read, unserialised and rewrote the whole history. Two options, one
+         * import each, bounded permanently. The rotation is keyed on the
+         * per-import state flag overrides_rotated, so the three or four flushes
+         * inside a single import rotate exactly once between them.
+         *
          * @param bool $final True at end of import: writes the run summary and
          *                    warns about exclusions that matched nothing.
          */
         public function avalon_flush_import_log($final = true){
             $buf = $this->avalon_state('log_buffer');
             if (is_array($buf) && ! empty($buf)) {
-                $stored = get_option('avalon_geocode_overrides');
-                if (! is_array($stored)) {
+                if ($this->avalon_state('overrides_rotated')) {
+                    $stored = get_option('avalon_geocode_overrides');
+                    if (! is_array($stored)) {
+                        $stored = array();
+                    }
+                } else {
+                    $prev = get_option('avalon_geocode_overrides');
+                    if (is_array($prev) && ! empty($prev)) {
+                        update_option('avalon_geocode_overrides_prev', $prev, 'no');
+                    }
                     $stored = array();
+                    $this->avalon_state_set('overrides_rotated', true);
                 }
                 $stored = array_merge($stored, $buf);
                 if (count($stored) > 500) {
@@ -1144,7 +1166,7 @@ if (!class_exists('SLP_Avalon')){
                 $location = $data['location'];
                 $name = $location['sl_store'];
                 $address = $location['sl_address'];
-                $address2 = $location['sl_address2'];
+                $address2 = isset($location['sl_address2']) ? $location['sl_address2'] : '';
                 $city = $location['sl_city'];
                 $state = $location['sl_state'];
                 $zip = $location['sl_zip'];
