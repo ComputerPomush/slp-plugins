@@ -6,3 +6,12 @@
 #
 # Upstream SLP plugins are never edited, so they are deliberately left alone.
 slp_avalon/** -text
+#
+# The build, test and publish tooling is verified by md5 the same way, and
+# release-pins.csv pins .gitattributes itself. Without these four lines a
+# fresh clone under core.autocrlf=true checks all of them out as CRLF and
+# every hash in Publish-Step14's tables is wrong before it starts.
+build/** -text
+test/** -text
+*.ps1 -text
+.gitattributes -text

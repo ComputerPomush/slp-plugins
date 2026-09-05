@@ -83,6 +83,20 @@ if (!class_exists('SLP_Avalon')){
             // before remove_old_csv_files_after_import at 999 clears the
             // working directory out from under us.
             add_action('slp_csv_processing_complete',array(self::$instance,'avalon_flush_import_log'),500,0);
+            // SLP Dealer Guard, REST disclosure. Issue 33.
+            //
+            // add_filter, not add_action: rest_post_dispatch passes the
+            // response through and expects it back. Registered as an
+            // action the callback would still run and its return value
+            // would be discarded - the key would go out and nothing
+            // would report a fault.
+            //
+            // Priority 999 for the reason territory_gate is at 20: the
+            // strip must be the last thing to touch the payload.
+            // accepted_args 3, because the callback reads the route off
+            // $request; a registration passing fewer leaves it null and
+            // strips nothing, silently. suite-v018 asserts all three.
+            add_filter('rest_post_dispatch',array(self::$instance,'avalon_rest_strip_keys'),999,3);
         }
 
         private function register_shortcodes(){
@@ -1849,6 +1863,177 @@ if (!class_exists('SLP_Avalon')){
             unset( $results['outside_radius'] );
 
             return $results;
+        }
+
+        /**
+         * The option slugs that never travel to an unentitled caller.
+         *
+         * Two, and closed at two: google_server_key and google_geocode_key
+         * are the only SmartOptions key reads in this file, at lines 152,
+         * 153, 155 and 879. On Aura DEV 2026-09-05 both slugs held the
+         * SAME 39-character value - one unrestricted key wearing two
+         * names, which is the /options/all face of the key-split item.
+         *
+         * Public so suite-v018 can read the list rather than restate it.
+         *
+         * @return array
+         */
+        public function avalon_rest_protected_slugs(){
+            return array(
+                'google_server_key',
+                'google_geocode_key',
+            );
+        }
+
+        /**
+         * Strip the Google API keys from Store Locator Plus REST output.
+         *
+         * Filter on rest_post_dispatch at priority 999. Measured on Aura
+         * DEV 2026-09-05: an anonymous GET of
+         * /wp-json/store-locator-plus/v1/options/all returns HTTP 201 and
+         * 10,539 bytes carrying the Google key twice. The v2 namespace
+         * returns the identical bytes.
+         *
+         * SCOPE, decision 62. The route test is the /store-locator-plus/
+         * PREFIX, not the v1 namespace. This install registers three SLP
+         * namespaces - v1, v2, and a bare store-locator-plus carrying the
+         * report routes. A v1-only test closes one of the two leaking
+         * routes and leaves the other open.
+         *
+         * TWO LIMBS, decision 63, because the secret arrives two ways.
+         *
+         *   Payload limb - unset any protected key wherever it appears in
+         *   the data, at any depth. The measured payload is
+         *   store-locator-le -> settings -> options -> a flat map of 120
+         *   slugs, every leaf at depth four. Walking by NAME rather than
+         *   by that path means a future route serialising SmartOptions
+         *   differently is covered without another edit.
+         *
+         *   Route limb - /options/<slug> and /options/filtered/<slug> name
+         *   the option in the ROUTE and return it in a generically named
+         *   field, so a name-keyed walk cannot see it. Both return HTTP
+         *   500 today, on v1 and v2 alike, which is exactly why the shape
+         *   of a working response cannot be measured and the limb cannot
+         *   be keyed on field names. Protected slug in, empty body out.
+         *
+         * WHY THIS HOOK. Read out of wp-includes/rest-api/
+         * class-wp-rest-server.php: rest_post_dispatch fires in
+         * serve_request() at 463, in embedded-resource resolution at 823,
+         * and once per sub-request in the batch endpoint at 1893.
+         * dispatch() applies only rest_pre_dispatch, so internal
+         * rest_do_request() calls do NOT pass through here and
+         * server-side consumers keep the key. The batch site is why this
+         * hook beats rest_pre_echo_response: there the filter runs with
+         * $single_request, so get_route() is still the SLP route, where
+         * rest_pre_echo_response would see /batch/v1 and the namespace
+         * test would miss. Batch is opt-in per route - allow_batch['v1'],
+         * line 1801 - and SLP has not opted in, so that is coverage held
+         * in reserve, not a live hole closed.
+         *
+         * $server and $request default to null so that a mis-wired
+         * registration cannot fatal on every REST response the site
+         * serves. It fails CLOSED on its own behaviour and OPEN on the
+         * secret, which is the wrong way round for a security control -
+         * so the wiring is asserted in suite-v018 against the artefact
+         * text, and again after deploy by an anonymous curl. A green
+         * suite is not evidence that this filter ran.
+         *
+         * @param  mixed $result  WP_REST_Response, or a WP_Error.
+         * @param  mixed $server  WP_REST_Server. Unused.
+         * @param  mixed $request WP_REST_Request.
+         * @return mixed
+         */
+        public function avalon_rest_strip_keys( $result, $server = null, $request = null ){
+            if ( ! ( $result instanceof WP_REST_Response ) ) {
+                return $result;
+            }
+            if ( ! ( $request instanceof WP_REST_Request ) ) {
+                return $result;
+            }
+
+            $route = $request->get_route();
+            if ( ! is_string( $route ) || strpos( $route, '/store-locator-plus/' ) !== 0 ) {
+                return $result;
+            }
+
+            // After the route test, never before it: current_user_can() is
+            // not free and this callback sees every REST response.
+            if ( current_user_can( 'manage_slp_user' ) ) {
+                return $result;
+            }
+
+            $slugs = $this->avalon_rest_protected_slugs();
+
+            // Route limb. 'all' and 'import' are slugs too and are not
+            // protected, so they fall through to the payload limb.
+            $matched = array();
+            if ( preg_match( '#/options/(?:filtered/)?([A-Za-z0-9_]+)#', $route, $matched )
+                 && in_array( $matched[1], $slugs, true ) ) {
+                $result->set_data( array() );
+                return $result;
+            }
+
+            // Payload limb. set_data() only when something actually moved,
+            // so the common case is a walk and no write.
+            $removed = 0;
+            $data    = $this->avalon_rest_strip_walk( $result->get_data(), $slugs, 0, $removed );
+            if ( $removed > 0 ) {
+                $result->set_data( $data );
+            }
+
+            return $result;
+        }
+
+        /**
+         * Remove protected keys from a response body, by name, at any depth.
+         *
+         * Recurses into arrays and stdClass only. Any other object is left
+         * exactly as it is - a REST payload can carry objects that are not
+         * plain data, and walking into them is how a filter turns a
+         * disclosure fix into an outage.
+         *
+         * Depth is capped at 10. The measured payload bottoms out at 4.
+         *
+         * @param  mixed $node
+         * @param  array $slugs
+         * @param  int   $depth
+         * @param  int   $removed  By reference. Count of keys unset.
+         * @return mixed
+         */
+        private function avalon_rest_strip_walk( $node, $slugs, $depth, &$removed ){
+            if ( $depth > 10 ) {
+                return $node;
+            }
+
+            if ( is_array( $node ) ) {
+                foreach ( $node as $key => $value ) {
+                    if ( is_string( $key ) && in_array( $key, $slugs, true ) ) {
+                        unset( $node[ $key ] );
+                        $removed++;
+                        continue;
+                    }
+                    if ( is_array( $value ) || ( $value instanceof stdClass ) ) {
+                        $node[ $key ] = $this->avalon_rest_strip_walk( $value, $slugs, $depth + 1, $removed );
+                    }
+                }
+                return $node;
+            }
+
+            if ( $node instanceof stdClass ) {
+                foreach ( get_object_vars( $node ) as $key => $value ) {
+                    if ( in_array( $key, $slugs, true ) ) {
+                        unset( $node->$key );
+                        $removed++;
+                        continue;
+                    }
+                    if ( is_array( $value ) || ( $value instanceof stdClass ) ) {
+                        $node->$key = $this->avalon_rest_strip_walk( $value, $slugs, $depth + 1, $removed );
+                    }
+                }
+                return $node;
+            }
+
+            return $node;
         }
     }
 }
