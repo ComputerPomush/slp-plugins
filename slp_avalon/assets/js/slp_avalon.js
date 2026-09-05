@@ -1101,9 +1101,38 @@
     //stale country to be validated against a fresh location.
     jQuery(this).data("place_country", null);
   });
-  function initialize_autocomplete() {
-    let input = document.getElementById("addressInput");
-    if (!input) return;
+  //Issue 35, v0.0.19. Places Autocomplete bills per request and the
+  //requests go browser -> Google directly, so no WordPress rate limiter,
+  //WAF rule, nonce or page cache can see them. The widget queries on every
+  //keystroke from the first, and with address_autocomplete = zipcode the
+  //opening characters of a ZIP cannot match anything the visitor wants.
+  //Deferring the ATTACH until the field holds this many characters skips
+  //those requests. Constructing the widget is free; only queries bill.
+  //
+  //Decision 65: the number lives here and is deliberately NOT
+  //slplus.options.address_autocomplete_min. That option exists and reads 3
+  //but drives SLP's own jQuery-UI zip suggester, and inheriting it would
+  //move this gate silently whenever someone tuned the suggester.
+  //
+  //The widget does not query text already sitting in the field when it
+  //attaches, so predictions first appear on the keystroke AFTER the
+  //threshold is crossed - at 3, from the fourth character. Set this to 2
+  //to put them back at the third and spend one more request per visitor.
+  var avalon_autocomplete_min_chars = 3;
+  var avalon_autocomplete_attached = false;
+  function avalon_attach_autocomplete(input) {
+    //Idempotent. The delegated handler can fire more than once before
+    //off() takes effect, and avalon_init_gmaps() is not guaranteed to run
+    //exactly once.
+    if (avalon_autocomplete_attached || !input) return;
+    //typeof, not window.google. google is a bare global in the browser and
+    //in the vm harness, where window carries no google property at all - a
+    //window.google test would return early under test, never construct the
+    //widget, and let the negative case pass for the wrong reason.
+    if (typeof google === "undefined" || !google.maps || !google.maps.places) {
+      return;
+    }
+    avalon_autocomplete_attached = true;
     let places_autocomplete = new google.maps.places.Autocomplete(input);
     //Layer 1 needs the country component; geometry is what the handler below
     //already reads. Nothing else is used, and naming the field set also drops
@@ -1122,6 +1151,28 @@
         jQuery(input).data("place_country", avalon_country_of(selected));
         jQuery("#searchForm").find("input[type=submit]").trigger("click");
       }
+    });
+  }
+  function initialize_autocomplete() {
+    let input = document.getElementById("addressInput");
+    if (!input) return;
+    //A field that already holds a value did not get there by typing - the
+    //URL bootstrap in cslmap_build_map() fills it - so there are no
+    //keystrokes left to save and attaching now preserves the edit path.
+    let seeded = jQuery(input).val();
+    if (seeded && seeded.trim().length >= avalon_autocomplete_min_chars) {
+      avalon_attach_autocomplete(input);
+      return;
+    }
+    //Delegated and namespaced, matching the "change" handler above: the
+    //search form is re-rendered on some templates and a directly bound
+    //listener would not survive it.
+    jQuery(document).on("input.avalon_ac", "#addressInput", function () {
+      if (jQuery(this).val().trim().length < avalon_autocomplete_min_chars) {
+        return;
+      }
+      jQuery(document).off("input.avalon_ac", "#addressInput");
+      avalon_attach_autocomplete(this);
     });
   }
   String.prototype.isNumber = function () {

@@ -4,8 +4,16 @@
 # machine doing the commit. They are stored in git with literal CRLF, and
 # -text disables end-of-line conversion on both check-in and checkout.
 #
-# Upstream SLP plugins are never edited, so they are deliberately left alone.
+# Upstream SLP plugins are never edited. Two of them are PINNED, and that is
+# a different rule: release-pins.csv and Publish's $Upstream table carry md5s
+# for store-locator-le/js/slp_core.js and slp_core.min.js, because
+# slp_avalon.js cites lines 1720, 1808 and 1842 of that file by number and an
+# SLP auto-update moving them is what the pins exist to catch. Both files are
+# stored LF; without the rule below a fresh clone under core.autocrlf=true
+# checks them out CRLF and both pins fail before Verify starts. Issue 34.
+# Stopping git converting a file is not editing that file.
 slp_avalon/** -text
+store-locator-le/js/** -text
 #
 # The build, test and publish tooling is verified by md5 the same way, and
 # release-pins.csv pins .gitattributes itself. Without these four lines a
