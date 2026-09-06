@@ -1114,11 +1114,25 @@
   //but drives SLP's own jQuery-UI zip suggester, and inheriting it would
   //move this gate silently whenever someone tuned the suggester.
   //
-  //The widget does not query text already sitting in the field when it
-  //attaches, so predictions first appear on the keystroke AFTER the
-  //threshold is crossed - at 3, from the fourth character. Set this to 2
-  //to put them back at the third and spend one more request per visitor.
-  var avalon_autocomplete_min_chars = 3;
+  //MEASURED 2026-09-04, and the reverse of what this comment said in
+  //v0.0.19: the widget DOES query the text already in the field when it
+  //attaches. The first request after the gate fires reads
+  //AutocompletionService.GetPredictions?1s488. So a query is billed on
+  //the threshold keystroke itself, not on the one after it.
+  //
+  //Cost of a five-digit ZIP, measured, not inferred:
+  //    no gate   queries on 1,2,3,4,5   5 requests
+  //    3         queries on 3,4,5       3 requests
+  //    4         queries on 4,5         2 requests   <- decision 67
+  //
+  //Do NOT set this to 2. That queries on 2,3,4,5 - four requests, worse
+  //than 3 and worse than 4. The v0.0.19 comment recommended exactly that
+  //and was wrong.
+  //
+  //The cost of 4 over 3 is one keystroke of delay before predictions
+  //paint. On the ZIP path that is nothing, because the ZIP is complete
+  //by then anyway. On the city and street path it is one character.
+  var avalon_autocomplete_min_chars = 4;
   var avalon_autocomplete_attached = false;
   function avalon_attach_autocomplete(input) {
     //Idempotent. The delegated handler can fire more than once before
@@ -1156,9 +1170,25 @@
   function initialize_autocomplete() {
     let input = document.getElementById("addressInput");
     if (!input) return;
-    //A field that already holds a value did not get there by typing - the
-    //URL bootstrap in cslmap_build_map() fills it - so there are no
-    //keystrokes left to save and attaching now preserves the edit path.
+    //A field that already holds a value did not get there by typing, so
+    //there are no keystrokes left to save and attaching now preserves the
+    //edit path. The premise is right; v0.0.19's comment named the wrong
+    //mechanism. MEASURED order on /find-a-dealer/?place_address=48843:
+    //
+    //    avalon_init_gmaps()          Maps callback
+    //      initialize_autocomplete()    field EMPTY -> deferred branch
+    //    cslmap_build_map()           fills #addressInput via .val()
+    //                                 -> fires NO input event
+    //
+    //A URL bootstrap therefore never reaches this branch. What does reach
+    //it is browser autofill and bfcache value restoration on a back-button
+    //return - real paths, just not the one previously named.
+    //
+    //Do not "fix" cslmap_build_map() to fire a synthetic input event. It
+    //would attach the widget and immediately bill a query for a search
+    //that already ran server-side. A deep-link visitor who does not touch
+    //the field currently costs zero, and editing still works because the
+    //delegated listener below is armed.
     let seeded = jQuery(input).val();
     if (seeded && seeded.trim().length >= avalon_autocomplete_min_chars) {
       avalon_attach_autocomplete(input);

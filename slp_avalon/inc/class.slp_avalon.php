@@ -642,6 +642,44 @@ if (!class_exists('SLP_Avalon')){
         }
 
         /**
+         * Issue 31 reconcile rails.
+         *
+         * floor_pct  The reconcile pass refuses to run at all when
+         *            avalon_updated_slp_locations holds fewer hashes than
+         *            this fraction of the location table. An import that
+         *            died before recording anything leaves that option
+         *            empty, and the pre-v0.0.20 loop would then delete
+         *            every location on the site - 308 rows - because every
+         *            hash misses. 0.5 means a feed that legitimately halved
+         *            is also refused, which is correct: that wants a human.
+         *
+         * max_trash  Cap on store_page posts one import may dispose of.
+         *            Aborts the whole pass rather than half-applying, the
+         *            rail Tier 2 uses for corrections - but NOT that rail's
+         *            number. max_corrections is 60 since v0.0.17, which is
+         *            far too loose here: against 320 posts it would permit
+         *            trashing a fifth of them. This is sized off its own
+         *            measurement instead. The orphan set on 2026-09-05 is
+         *            13 on Aura LIVE and 12 on Aura DEV, so 30 carries
+         *            better than 2x headroom and stays under a tenth of
+         *            the table.
+         *
+         * cleanup    Master switch. False leaves the pre-v0.0.20 behaviour
+         *            exactly: rows deleted, posts left standing. That is
+         *            the rollback - one wp-config.php line, no deploy.
+         */
+        public function avalon_orphan_config(){
+            return array(
+                'cleanup'   => defined('AVALON_ORPHAN_CLEANUP')
+                               ? (bool)  AVALON_ORPHAN_CLEANUP        : true,
+                'max_trash' => defined('AVALON_ORPHAN_MAX_TRASH')
+                               ? (int)   AVALON_ORPHAN_MAX_TRASH      : 30,
+                'floor_pct' => defined('AVALON_RECONCILE_FLOOR_PCT')
+                               ? (float) AVALON_RECONCILE_FLOOR_PCT   : 0.5,
+            );
+        }
+
+        /**
          * Rows Tier 2 must never move.
          *
          * DONNIE MARCH, Howell MI, carries I-94 Marine's Belleville
@@ -874,6 +912,9 @@ if (!class_exists('SLP_Avalon')){
                 'excluded'        => (int) $this->avalon_state('excluded'),
                 'geocodes_spent'  => (int) $this->avalon_state('geocodes_spent'),
                 'tier2_aborted'   => (bool) $this->avalon_state('tier2_aborted'),
+                'rows_removed'      => (int)  $this->avalon_state('rows_removed'),
+                'orphans_trashed'   => (int)  $this->avalon_state('orphans_trashed'),
+                'reconcile_aborted' => (bool) $this->avalon_state('reconcile_aborted'),
                 'stale_exclusions'=> $missing
             );
 
@@ -1220,25 +1261,150 @@ if (!class_exists('SLP_Avalon')){
             }
         }
 
+        /**
+         * Reconcile the location table against the feed.
+         *
+         * Every location whose hash is absent from
+         * avalon_updated_slp_locations is removed. Issue 31:
+         * currentLocation->delete() drops the wp_store_locator row and
+         * leaves the linked store_page post standing. That is where the
+         * orphans come from - measured 2026-09-05 as 13 on Aura LIVE and
+         * 12 on Aura DEV, the twelve shared by post ID because DEV was
+         * cloned from LIVE. rows 308 = linked 308 on both, so the orphan
+         * count is exactly posts minus rows with no third case hiding.
+         *
+         * The post is TRASHED, not deleted. The URL 404s immediately, the
+         * trash empties itself after EMPTY_TRASH_DAYS, and the window
+         * stays recoverable - this runs unattended every night.
+         *
+         * Two passes, so a cap aborts cleanly instead of half-applying,
+         * the rail Tier 2 already uses for corrections. Pass 1 identifies
+         * and mutates nothing. The rails then run against the complete
+         * candidate set. Pass 2 acts.
+         */
         public function csv_processing_complete_func()
         {
-            global $slplus;
+            global $slplus, $wpdb;
             if (!is_a($slplus, 'SLPlus')) {
                 update_option('avalon_updated_slp_locations', array());
                 return;
             }
+
+            $cfg = $this->avalon_orphan_config();
+
             //Remove all the locations that are not in the saved updated locations option
             $updated_locations = get_option('avalon_updated_slp_locations');
+            if (! is_array($updated_locations)) {
+                $updated_locations = array();
+            }
             //Get Locations
             $locations = $this->slp_get_all_locations();
+            if (! is_array($locations)) {
+                $locations = array();
+            }
+
+            //Rail 1. Refuse the whole pass when the feed record is missing
+            //or implausible. in_array() against an empty set misses every
+            //hash, so without this an import that died early deletes the
+            //entire table. Pre-existing risk; the post trashing below is
+            //what makes it unacceptable to leave in place.
+            $floor = (int) ceil(count($locations) * $cfg['floor_pct']);
+            if (count($locations) > 0 && count($updated_locations) < $floor) {
+                $this->avalon_state_set('reconcile_aborted', true);
+                $this->avalon_import_log(array(
+                    'stage'   => 'reconcile',
+                    'action'  => 'aborted',
+                    'reason'  => 'updated_locations below floor',
+                    'updated' => count($updated_locations),
+                    'floor'   => $floor,
+                    'total'   => count($locations),
+                ));
+                update_option('avalon_updated_slp_locations', array());
+                return;
+            }
+
+            //Pass 1 - identify. Nothing is mutated here.
+            //
+            //slp_get_all_locations() does not select sl_linked_postid and
+            //is shared with create_location_hash(), so the post id is read
+            //per candidate rather than by widening that SELECT.
+            $table = $wpdb->prefix . 'store_locator';
+            $stale = array();
             foreach ($locations as $location) {
-                //Get Identifier
                 $location_hash = $this->create_location_hash(array('location' => $location));
-                $identifier = $location['identifier'];
-                if (!in_array($location_hash, $updated_locations)) {
-                    $slplus->currentLocation->delete($location['sl_id']);
+                if (in_array($location_hash, $updated_locations)) {
+                    continue;
+                }
+                $post_id = (int) $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT sl_linked_postid FROM {$table} WHERE sl_id = %d",
+                        $location['sl_id']
+                    )
+                );
+                $stale[] = array(
+                    'sl_id'   => (int) $location['sl_id'],
+                    'store'   => isset($location['sl_store']) ? $location['sl_store'] : '',
+                    'post_id' => $post_id,
+                );
+            }
+
+            //Rail 2. Cap the disposal, on the whole candidate set, before
+            //anything is touched. Exceeding it leaves the pre-v0.0.20
+            //behaviour - rows go, posts stay - and logs the count so the
+            //next session sees it. Breaking out of the loop instead would
+            //silently change row-deletion behaviour, which the cap is not
+            //for.
+            $trash_ok = $cfg['cleanup'];
+            if ($trash_ok && count($stale) > $cfg['max_trash']) {
+                $trash_ok = false;
+                $this->avalon_state_set('reconcile_aborted', true);
+                $this->avalon_import_log(array(
+                    'stage'  => 'reconcile',
+                    'action' => 'orphan_cap_exceeded',
+                    'stale'  => count($stale),
+                    'cap'    => (int) $cfg['max_trash'],
+                ));
+            }
+
+            //Pass 2 - act.
+            foreach ($stale as $row) {
+                $slplus->currentLocation->delete($row['sl_id']);
+                $this->avalon_state_bump('rows_removed');
+
+                if (! $trash_ok || $row['post_id'] <= 0) {
+                    continue;
+                }
+                //Never trash an arbitrary id. sl_linked_postid can be stale,
+                //and a wrong value here would trash a page or a boat model.
+                if (get_post_type($row['post_id']) !== 'store_page') {
+                    $this->avalon_import_log(array(
+                        'stage'   => 'reconcile',
+                        'action'  => 'orphan_skipped',
+                        'store'   => $row['store'],
+                        'post_id' => $row['post_id'],
+                        'reason'  => 'post absent or not a store_page',
+                    ));
+                    continue;
+                }
+                if (wp_trash_post($row['post_id'])) {
+                    $this->avalon_state_bump('orphans_trashed');
+                    $this->avalon_import_log(array(
+                        'stage'   => 'reconcile',
+                        'action'  => 'orphan_trashed',
+                        'store'   => $row['store'],
+                        'sl_id'   => $row['sl_id'],
+                        'post_id' => $row['post_id'],
+                    ));
+                } else {
+                    $this->avalon_import_log(array(
+                        'stage'   => 'reconcile',
+                        'action'  => 'orphan_trash_failed',
+                        'store'   => $row['store'],
+                        'post_id' => $row['post_id'],
+                    ));
                 }
             }
+
             //Clear the option
             update_option('avalon_updated_slp_locations', array());
         }

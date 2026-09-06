@@ -290,8 +290,9 @@ ck($cfg['max_corrections'] ?? null, 60,
 
 // Both numbers. 60 arriving and 25 leaving are separate claims, and the old
 // comment carried a second 25 that edit 4 had to take with it.
-ck(substr_count($src, ': 25,') + substr_count($src, 'first 25'), 0,
-   '[v17]  no default of 25 survives anywhere in the artefact');
+ck(substr_count($src, 'AVALON_TIER2_MAX_CORRECTIONS  : 25,')
+    + substr_count($src, 'first 25'), 0,
+   '[v17]  no Tier 2 default of 25 survives anywhere in the artefact');
 
 ck($cfg['correct_mi'] ?? null, 10.0,
    '[both] correction threshold still 10 mi - rev15 s3, 8.32 to 10.27');

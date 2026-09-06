@@ -487,9 +487,12 @@ ck(substr_count($src, "'avalon_import_coordinate_guard'),20,1);"), 1,
 ck(substr_count($src, "'territory_gate'),20,1);"), 1,
    '[both] the Layer 3 territory gate is still registered at priority 20');
 
-ck(substr_count($src, 'AVALON_TIER2_MAX_CORRECTIONS  : 60,')
-    + substr_count($src, ': 25,'), 1,
-   '[both] v0.0.17 cap of 60 present and no default of 25 came back');
+// Both numbers as a PAIR, not a sum. The sum form this replaced scored 1
+// for [60 present, 25 absent] AND for [60 absent, 25 present], so it
+// could not tell v0.0.17 from the v0.0.16 it was written to catch.
+ck([substr_count($src, 'AVALON_TIER2_MAX_CORRECTIONS  : 60,'),
+    substr_count($src, 'AVALON_TIER2_MAX_CORRECTIONS  : 25,')], [1, 0],
+   '[both] v0.0.17 cap of 60 arrived and the Tier 2 default of 25 departed');
 
 ck(substr_count($src, 'overrides_rotated'), 3,
    '[both] v0.0.17 rotation state key: read, write, docblock');

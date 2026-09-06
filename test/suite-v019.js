@@ -132,12 +132,27 @@ function newGate(seed, opts) {
 
 /* ------------------------------------------- the three globals exist */
 
+/**
+ * Decision 67, v0.0.20: the threshold moved 3 -> 4.
+ *
+ * MEASURED, s0.77: the widget queries the text already in the field when it
+ * attaches, so a query bills on the threshold keystroke itself. A five-digit
+ * ZIP costs 5 requests ungated, 3 at a threshold of 3, and 2 at 4.
+ *
+ * This is the ONE place the number lives in this suite. The sequences below
+ * derive from it, so moving the artefact's constant surfaces as exactly one
+ * named failure - this case - rather than three anonymous ones. Three cases
+ * broke when the constant moved and every one of them had to be found by
+ * running the suite.
+ */
+const MIN = 4;
+
 let g = newGate();
 
 eq(
   g.ctx.avalon_autocomplete_min_chars,
-  3,
-  "[DISCRIMINATOR] the threshold is a constant in our own file and reads 3"
+  MIN,
+  "[DISCRIMINATOR] the threshold is a constant in our own file and reads " + MIN
 );
 ok(
   typeof g.ctx.avalon_attach_autocomplete === "function",
@@ -185,15 +200,19 @@ eq(
  * labelled, which is the inverse of the trap in rev14 SS8. The transition
  * 0,0,1,1 is reachable only by a build that defers.
  */
+const zip = "48843";
 const walk = [];
-["4", "48", "488", "4884"].forEach(function (v) {
-  g.fire(v);
+for (let n = 1; n <= MIN + 1; n += 1) {
+  g.fire(zip.slice(0, n));
   walk.push(g.built.length);
-});
+}
+const wantWalk = [];
+for (let n = 1; n <= MIN + 1; n += 1) wantWalk.push(n < MIN ? 0 : 1);
 eq(
   walk,
-  [0, 0, 1, 1],
-  "[DISCRIMINATOR] nothing at one or two characters, one widget at three, none after"
+  wantWalk,
+  "[DISCRIMINATOR] nothing below the threshold, one widget on the threshold" +
+    " keystroke, and still one after"
 );
 eq(
   g.ctx.avalon_autocomplete_attached,
@@ -236,24 +255,79 @@ eq(
 /* ------------------------------- whitespace is not a character */
 
 g = newGate();
+const padShort = "  a  ";                       // 5 raw, 1 trimmed
+const padLong  = "  " + "48843".slice(0, MIN) + "  ";  // MIN+4 raw, MIN trimmed
 const pad = [];
-["  a  ", "  abc  "].forEach(function (v) {
+[padShort, padLong].forEach(function (v) {
   g.fire(v);
   pad.push(g.built.length);
 });
 eq(
   pad,
   [0, 1],
-  "[DISCRIMINATOR] a padded single character is one character, not five"
+  "[DISCRIMINATOR] padding is not content - a padded single character stays" +
+    " below the threshold and a padded MIN-character value crosses it"
 );
 
-/* ------------------- a field seeded by the URL bootstrap attaches at once */
+/* ----------- a field ALREADY holding a value when the gate runs ----------- */
 
+/**
+ * s0.79 and s0.80. This case sets the field value BEFORE calling
+ * initialize_autocomplete(), and v0.0.19's comment called that "the URL
+ * bootstrap". MEASURED on /find-a-dealer/?place_address=48843, that is not
+ * what happens:
+ *
+ *     avalon_init_gmaps()          Maps callback
+ *       initialize_autocomplete()    field EMPTY -> deferred branch
+ *     cslmap_build_map()           fills #addressInput via .val()
+ *                                  -> fires NO input event
+ *
+ * So a URL bootstrap NEVER reaches this branch. What does reach it is browser
+ * autofill and bfcache value restoration on a back-button return. The test is
+ * right; only its justification was wrong. The companion case below runs the
+ * order that a URL bootstrap actually produces.
+ */
 g = newGate("48843");
 eq(
   [g.built.length, g.handlers.length],
   [1, 0],
-  "[GUARD] a field already holding an address attaches at once, with no listener left behind"
+  "[GUARD] a field already holding an address when the gate runs attaches at" +
+    " once, with no listener left behind"
+);
+
+/* ------------- the order a URL bootstrap actually produces --------------- */
+
+/**
+ * s0.80's companion. The gate runs against an EMPTY field, and only then is
+ * the value written - the way cslmap_build_map() does it. No input event
+ * fires, so nothing attaches, and the listener must still be armed so that
+ * the visitor's first edit keystroke attaches immediately.
+ *
+ * TAGGED [DISCRIMINATOR], and the first draft of these two cases got that
+ * wrong. v0.0.18 has no gate at all: it constructs the widget at init and
+ * registers no listener, so [built, handlers] is [1,0] where this asserts
+ * [0,1], and fire() returns false where the next case asserts true. Both fail
+ * against the control, which is the definition of a discriminator. Calling
+ * them guards would have made Publish-Step16 assert zero guard failures
+ * against a control that produces two.
+ *
+ * What they protect is the s0.79 finding that a deep-link visitor who never
+ * touches the field costs ZERO Places requests. A future "fix" that fires a
+ * synthetic input event from cslmap_build_map() would bill one per deep
+ * link, and these are what would catch it.
+ */
+g = newGate();
+g.state.inputValue = "48843";
+eq(
+  [g.built.length, g.handlers.length],
+  [0, 1],
+  "[DISCRIMINATOR] a value written AFTER the gate runs fires no input event, so" +
+    " nothing is constructed and the listener is still armed"
+);
+eq(
+  [g.fire("48843"), g.built.length],
+  [true, 1],
+  "[DISCRIMINATOR] and the very next keystroke attaches, so editing still works"
 );
 
 /* --------------- a seeded field below the threshold still defers */
@@ -263,6 +337,19 @@ eq(
   [g.built.length, g.handlers.length],
   [0, 1],
   "[DISCRIMINATOR] a seeded value below the threshold defers, like an empty field"
+);
+
+/**
+ * Decision 67 specifically. Three characters crossed the old threshold and
+ * does not cross the new one, so this case separates v0.0.20 from v0.0.19 as
+ * well as from v0.0.18 - the only case in this file that does.
+ */
+g = newGate("488");
+eq(
+  [g.built.length, g.handlers.length],
+  [0, 1],
+  "[DISCRIMINATOR] three characters no longer attach - decision 67 moved the" +
+    " threshold to " + MIN
 );
 
 /* ------------------------------- Maps failed to load */
