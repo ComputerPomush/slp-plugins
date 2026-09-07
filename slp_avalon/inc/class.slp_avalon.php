@@ -642,38 +642,29 @@ if (!class_exists('SLP_Avalon')){
         }
 
         /**
-         * Issue 31 reconcile rails.
+         * Issue 31 reconcile rail.
          *
          * floor_pct  The reconcile pass refuses to run at all when
          *            avalon_updated_slp_locations holds fewer hashes than
          *            this fraction of the location table. An import that
          *            died before recording anything leaves that option
-         *            empty, and the pre-v0.0.20 loop would then delete
-         *            every location on the site - 308 rows - because every
-         *            hash misses. 0.5 means a feed that legitimately halved
-         *            is also refused, which is correct: that wants a human.
+         *            empty, and an unrailed loop would then delete every
+         *            location on the site - 308 rows - because every hash
+         *            misses. 0.5 means a feed that legitimately halved is
+         *            also refused, which is correct: that wants a human.
          *
-         * max_trash  Cap on store_page posts one import may dispose of.
-         *            Aborts the whole pass rather than half-applying, the
-         *            rail Tier 2 uses for corrections - but NOT that rail's
-         *            number. max_corrections is 60 since v0.0.17, which is
-         *            far too loose here: against 320 posts it would permit
-         *            trashing a fifth of them. This is sized off its own
-         *            measurement instead. The orphan set on 2026-09-05 is
-         *            13 on Aura LIVE and 12 on Aura DEV, so 30 carries
-         *            better than 2x headroom and stays under a tenth of
-         *            the table.
+         *            This rail matters more, not less, now that the
+         *            disposal is understood. SLP force-deletes each
+         *            removed location's store_page. A runaway pass does
+         *            not orphan 308 pages, it destroys them, along with
+         *            any Elementor content they carry.
          *
-         * cleanup    Master switch. False leaves the pre-v0.0.20 behaviour
-         *            exactly: rows deleted, posts left standing. That is
-         *            the rollback - one wp-config.php line, no deploy.
+         * v0.0.21 removed cleanup and max_trash. They configured a
+         * wp_trash_post() branch that could never execute - SLP disposes
+         * of the post one line earlier. See csv_processing_complete_func().
          */
         public function avalon_orphan_config(){
             return array(
-                'cleanup'   => defined('AVALON_ORPHAN_CLEANUP')
-                               ? (bool)  AVALON_ORPHAN_CLEANUP        : true,
-                'max_trash' => defined('AVALON_ORPHAN_MAX_TRASH')
-                               ? (int)   AVALON_ORPHAN_MAX_TRASH      : 30,
                 'floor_pct' => defined('AVALON_RECONCILE_FLOOR_PCT')
                                ? (float) AVALON_RECONCILE_FLOOR_PCT   : 0.5,
             );
@@ -688,10 +679,15 @@ if (!class_exists('SLP_Avalon')){
          * residence as a dealer location. Suppressing it instead would delete
          * the record that same night, because csv_processing_complete_func()
          * removes every location whose hash is absent from
-         * avalon_updated_slp_locations, and currentLocation->delete() leaves
-         * the store_page post orphaned: the Aura DEV sitemap carries 321
-         * entries against 308 records, and I-94 Marine alone holds three
-         * permalinks from exactly that delete-and-recreate churn. So it stays.
+         * avalon_updated_slp_locations, and currentLocation->delete()
+         * force-deletes the row's store_page with it. Suppressing this row
+         * would destroy a live dealer page, not merely orphan it. So it
+         * stays.
+         *
+         * The 321-against-308 sitemap gap is real but unrelated: measured
+         * 2026-09-07, all 12 orphaned pages predate the 2026-08-22 rebuild
+         * and every page created since is linked. They are not produced by
+         * this path.
          *
          * C/O Cole International USA is a customs broker in Pembina ND acting
          * for a dealer in Lac Du Bonnet MB. The stored coordinates are the
@@ -913,7 +909,7 @@ if (!class_exists('SLP_Avalon')){
                 'geocodes_spent'  => (int) $this->avalon_state('geocodes_spent'),
                 'tier2_aborted'   => (bool) $this->avalon_state('tier2_aborted'),
                 'rows_removed'      => (int)  $this->avalon_state('rows_removed'),
-                'orphans_trashed'   => (int)  $this->avalon_state('orphans_trashed'),
+                'pages_destroyed'   => (int)  $this->avalon_state('pages_destroyed'),
                 'reconcile_aborted' => (bool) $this->avalon_state('reconcile_aborted'),
                 'stale_exclusions'=> $missing
             );
@@ -1265,22 +1261,22 @@ if (!class_exists('SLP_Avalon')){
          * Reconcile the location table against the feed.
          *
          * Every location whose hash is absent from
-         * avalon_updated_slp_locations is removed. Issue 31:
-         * currentLocation->delete() drops the wp_store_locator row and
-         * leaves the linked store_page post standing. That is where the
-         * orphans come from - measured 2026-09-05 as 13 on Aura LIVE and
-         * 12 on Aura DEV, the twelve shared by post ID because DEV was
-         * cloned from LIVE. rows 308 = linked 308 on both, so the orphan
-         * count is exactly posts minus rows with no third case hiding.
+         * avalon_updated_slp_locations is removed, and SLP force-deletes
+         * that row's store_page along with it.
          *
-         * The post is TRASHED, not deleted. The URL 404s immediately, the
-         * trash empties itself after EMPTY_TRASH_DAYS, and the window
-         * stays recoverable - this runs unattended every night.
+         * CORRECTION, v0.0.21. Through v0.0.20 this comment claimed the
+         * post was left standing, and the orphan population was attributed
+         * to this path. Both were wrong, and a release was built on them.
+         * Measured 2026-09-07 on Aura DEV: all 12 orphaned pages predate
+         * the 2026-08-22 rebuild, all 308 pages created since are linked,
+         * and post_modified equals post_date on 11 of the 12 - they were
+         * never updated after creation, so they were orphaned at or near
+         * creation, not by any disposal. This pass is row-driven and
+         * cannot see a page that has no row. It never could.
          *
-         * Two passes, so a cap aborts cleanly instead of half-applying,
-         * the rail Tier 2 already uses for corrections. Pass 1 identifies
-         * and mutates nothing. The rails then run against the complete
-         * candidate set. Pass 2 acts.
+         * Two passes. Pass 1 identifies and mutates nothing, so the floor
+         * rail runs against the complete candidate set. Pass 2 acts, and
+         * records each store_page destroyed before it goes.
          */
         public function csv_processing_complete_func()
         {
@@ -1348,61 +1344,48 @@ if (!class_exists('SLP_Avalon')){
                 );
             }
 
-            //Rail 2. Cap the disposal, on the whole candidate set, before
-            //anything is touched. Exceeding it leaves the pre-v0.0.20
-            //behaviour - rows go, posts stay - and logs the count so the
-            //next session sees it. Breaking out of the loop instead would
-            //silently change row-deletion behaviour, which the cap is not
-            //for.
-            $trash_ok = $cfg['cleanup'];
-            if ($trash_ok && count($stale) > $cfg['max_trash']) {
-                $trash_ok = false;
-                $this->avalon_state_set('reconcile_aborted', true);
-                $this->avalon_import_log(array(
-                    'stage'  => 'reconcile',
-                    'action' => 'orphan_cap_exceeded',
-                    'stale'  => count($stale),
-                    'cap'    => (int) $cfg['max_trash'],
-                ));
-            }
-
             //Pass 2 - act.
+            //
+            //SLP disposes of the linked store_page itself.
+            //currentLocation->delete() calls delete_store_pages(), which
+            //force-deletes the post behind a pre_delete_post filter that
+            //vetoes anything that is not a store_page. Read at
+            //store-locator-le/include/unit/SLPlus_Location.php:771-846
+            //against 2311.17.01 on 2026-09-07, not inferred from a comment.
+            //
+            //v0.0.20 carried a wp_trash_post() branch here, on the belief
+            //that SLP left the post standing. It could not execute: the
+            //guard demanded a store_page and SLP had already destroyed
+            //exactly that. Three unattended runs logged orphan_skipped and
+            //orphans_trashed 0. Removed in v0.0.21.
+            //
+            //What is recorded instead is what SLP destroyed. The disposal
+            //is a force delete - no trash, no undo - and a store_page can
+            //carry Elementor content and postmeta that the feed cannot
+            //rebuild. Logged BEFORE the delete, because afterwards there
+            //is nothing left to name.
             foreach ($stale as $row) {
-                $slplus->currentLocation->delete($row['sl_id']);
-                $this->avalon_state_bump('rows_removed');
-
-                if (! $trash_ok || $row['post_id'] <= 0) {
-                    continue;
-                }
-                //Never trash an arbitrary id. sl_linked_postid can be stale,
-                //and a wrong value here would trash a page or a boat model.
-                if (get_post_type($row['post_id']) !== 'store_page') {
+                if ($row['post_id'] > 0) {
+                    $slug = get_post_field('post_name', $row['post_id']);
+                    $type = get_post_type($row['post_id']);
                     $this->avalon_import_log(array(
                         'stage'   => 'reconcile',
-                        'action'  => 'orphan_skipped',
-                        'store'   => $row['store'],
-                        'post_id' => $row['post_id'],
-                        'reason'  => 'post absent or not a store_page',
-                    ));
-                    continue;
-                }
-                if (wp_trash_post($row['post_id'])) {
-                    $this->avalon_state_bump('orphans_trashed');
-                    $this->avalon_import_log(array(
-                        'stage'   => 'reconcile',
-                        'action'  => 'orphan_trashed',
+                        'action'  => ($type === 'store_page')
+                                     ? 'page_destroyed_by_slp'
+                                     : 'page_retained_not_store_page',
                         'store'   => $row['store'],
                         'sl_id'   => $row['sl_id'],
                         'post_id' => $row['post_id'],
+                        'slug'    => is_string($slug) ? $slug : '',
+                        'type'    => is_string($type) ? $type : '',
                     ));
-                } else {
-                    $this->avalon_import_log(array(
-                        'stage'   => 'reconcile',
-                        'action'  => 'orphan_trash_failed',
-                        'store'   => $row['store'],
-                        'post_id' => $row['post_id'],
-                    ));
+                    if ($type === 'store_page') {
+                        $this->avalon_state_bump('pages_destroyed');
+                    }
                 }
+
+                $slplus->currentLocation->delete($row['sl_id']);
+                $this->avalon_state_bump('rows_removed');
             }
 
             //Clear the option
