@@ -535,8 +535,16 @@ ck(array_key_exists('cleanup', $cfg), false, '[v21]',
    'F3  cleanup removed');
 ck(array_key_exists('max_trash', $cfg), false, '[v21]',
    'F4  max_trash removed');
-ck(count($cfg), 1, '[v21]',
-   'F5  exactly one key remains');
+// NOT count($cfg) === 1, which is what the first cut asserted. v0.0.22
+// added relink_max - a correct addition - and broke it. A snapshot of how
+// many keys exist today is not the invariant; the invariant is that NO key
+// configuring post disposal survives, and that holds however many other
+// keys are added later.
+$disposal = array_values(array_filter(array_keys($cfg), function ($k) {
+    return ($k === 'cleanup') || (strpos($k, 'trash') !== false);
+}));
+ck($disposal, [], '[v21]',
+   'F5  no post-disposal key remains, whatever else is added later');
 
 // --- G. structural, against the artefact text ----------------------------
 echo "\nG  structural\n";

@@ -60,6 +60,14 @@ if (!class_exists('SLP_Avalon')){
             add_filter('gform_notification_23', array(self::$instance,'gform_send_emails_to_dealers'), 10, 3 );
             add_action('slp_manage_locations_action', array(self::$instance,'slp_manage_locations_action_func'), 1, 1);
             add_action('slp_csv_processing_complete', array(self::$instance,'remove_old_csv_files_after_import'), 999);
+            //v0.0.22 Part 1. Priority 5, BEFORE the reconcile at 10. A row
+            //repaired now is visible to the reconcile, which can then
+            //dispose of a page it previously could not see. The reverse
+            //order leaves that blind spot in place.
+            add_action('slp_csv_processing_complete', array(self::$instance,'avalon_relink_orphaned_pages'), 5);
+            //v0.0.22 Part 2. Priority 1 so the map is consulted before any
+            //other redirect handler can claim the request.
+            add_action('template_redirect', array(self::$instance,'avalon_orphan_redirect'), 1);
             add_filter('posts_where', array(self::$instance,'attachments_posts_where'), 10, 2);
             add_filter('slp_ajaxsql_queryparams',array(self::$instance,'slp_ajaxsql_queryparams'),999,2);
             // SLP Dealer Guard, Layer 3. Priority 20: after the priority-10
@@ -665,9 +673,279 @@ if (!class_exists('SLP_Avalon')){
          */
         public function avalon_orphan_config(){
             return array(
-                'floor_pct' => defined('AVALON_RECONCILE_FLOOR_PCT')
-                               ? (float) AVALON_RECONCILE_FLOOR_PCT   : 0.5,
+                'floor_pct'  => defined('AVALON_RECONCILE_FLOOR_PCT')
+                                ? (float) AVALON_RECONCILE_FLOOR_PCT  : 0.5,
+                //v0.0.22. A handful of unlinked rows is the defect the
+                //relink pass repairs. Hundreds means something systemic
+                //happened, and a mass write would compound it rather
+                //than fix it. 25 sits above the 12 ever observed and
+                //well under a tenth of the table.
+                'relink_max' => defined('AVALON_RELINK_MAX')
+                                ? (int)   AVALON_RELINK_MAX           : 25,
             );
+        }
+
+        /**
+         * v0.0.22 Part 1. Repair pages orphaned by an interrupted write.
+         *
+         * SLPlus_Location::crupdate_Page() inserts the page, then writes
+         * 26 slp_location_* postmeta keys one at a time, and only THEN
+         * calls MakePersistentIfChanged() to tell the row which page is
+         * its own. The write that prevents orphaning is last. Die
+         * anywhere in the middle and the page exists while no row claims
+         * it.
+         *
+         * Measured, not inferred: the seven orphans that carry any
+         * postmeta hold 6, 9, 10, 20, 21, 22 and 24 keys, and each set is
+         * an exact PREFIX of dbFields in declaration order. 26 positions
+         * checked, zero mismatches. The other five died before the first
+         * add_post_meta and are unrecoverable here - nothing identifies
+         * which row they belonged to.
+         *
+         * The trigger is not known and does not need to be. slp_location_id
+         * is written FIRST, so any page that got even one key names its own
+         * sl_id, and the missing link is reconstructable from the page.
+         */
+        public function avalon_relink_orphaned_pages()
+        {
+            global $wpdb;
+            $table = $wpdb->prefix . 'store_locator';
+            $cfg   = $this->avalon_orphan_config();
+
+            $unlinked = $wpdb->get_col(
+                "SELECT sl_id FROM {$table}
+                  WHERE sl_linked_postid IS NULL OR sl_linked_postid = 0"
+            );
+            if (! is_array($unlinked) || count($unlinked) === 0) {
+                return;
+            }
+
+            if (count($unlinked) > $cfg['relink_max']) {
+                $this->avalon_state_set('relink_aborted', true);
+                $this->avalon_import_log(array(
+                    'stage'    => 'relink',
+                    'action'   => 'relink_cap_exceeded',
+                    'unlinked' => count($unlinked),
+                    'cap'      => (int) $cfg['relink_max'],
+                ));
+                return;
+            }
+
+            foreach ($unlinked as $sl_id) {
+                $sl_id = (int) $sl_id;
+                if ($sl_id <= 0) {
+                    continue;
+                }
+
+                $candidates = $wpdb->get_col($wpdb->prepare(
+                    "SELECT p.ID
+                       FROM {$wpdb->postmeta} pm
+                       JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                      WHERE pm.meta_key   = 'slp_location_id'
+                        AND pm.meta_value = %s
+                        AND p.post_type   = 'store_page'
+                        AND p.post_status = 'publish'",
+                    (string) $sl_id
+                ));
+                if (! is_array($candidates)) {
+                    $candidates = array();
+                }
+
+                //Never guess. Zero means the page died before its first
+                //meta write; more than one means two pages claim the same
+                //row and a human decides which.
+                if (count($candidates) !== 1) {
+                    $this->avalon_import_log(array(
+                        'stage'      => 'relink',
+                        'action'     => 'relink_skipped',
+                        'sl_id'      => $sl_id,
+                        'candidates' => count($candidates),
+                        'reason'     => (count($candidates) === 0)
+                                        ? 'no store_page carries this sl_id'
+                                        : 'more than one store_page claims this sl_id',
+                    ));
+                    continue;
+                }
+
+                $post_id = (int) $candidates[0];
+
+                //Never steal a page another row already owns.
+                $owner = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT sl_id FROM {$table} WHERE sl_linked_postid = %d LIMIT 1",
+                    $post_id
+                ));
+                if ($owner > 0) {
+                    $this->avalon_import_log(array(
+                        'stage'   => 'relink',
+                        'action'  => 'relink_skipped',
+                        'sl_id'   => $sl_id,
+                        'post_id' => $post_id,
+                        'reason'  => 'page already owned by sl_id ' . $owner,
+                    ));
+                    continue;
+                }
+
+                $slug = get_post_field('post_name', $post_id);
+                $done = $wpdb->update(
+                    $table,
+                    array('sl_linked_postid' => $post_id),
+                    array('sl_id' => $sl_id),
+                    array('%d'),
+                    array('%d')
+                );
+
+                if ($done) {
+                    $this->avalon_state_bump('pages_relinked');
+                    $this->avalon_import_log(array(
+                        'stage'   => 'relink',
+                        'action'  => 'page_relinked',
+                        'sl_id'   => $sl_id,
+                        'post_id' => $post_id,
+                        'slug'    => is_string($slug) ? $slug : '',
+                    ));
+                } else {
+                    $this->avalon_import_log(array(
+                        'stage'   => 'relink',
+                        'action'  => 'relink_failed',
+                        'sl_id'   => $sl_id,
+                        'post_id' => $post_id,
+                    ));
+                }
+            }
+        }
+
+        /**
+         * v0.0.22 Part 2. Disposition of the twelve orphaned store pages.
+         *
+         * Adjudicated 2026-09-08 by measurement, not slug similarity. Eight
+         * resolved by matching the orphan's own slp_location_address
+         * postmeta against the live location table; beltzville,
+         * swinging-bridge, jolleys and ocean-marine carry no postmeta and
+         * were forced by having exactly one live page in their slug family.
+         *
+         * ashley-marine-llc-3 is the one product decision here. Its
+         * postmeta reads 621 Columbus Pkwy, Opelika AL, which appears zero
+         * times across all three feeds - a CLOSED location, not a surplus
+         * page for a surviving one. It goes to the Columbus GA store,
+         * roughly thirty miles away, so a visitor stays with the same
+         * dealer. A 410 would also have been defensible.
+         *
+         * This table is deliberately code, not an option. It is twelve
+         * rows, it is reviewable in a diff, and it dies with the release
+         * that stops needing it.
+         */
+        public function avalon_orphan_redirect_map()
+        {
+            return array(
+                'beltzville-manor-marine'       => 'beltzville-manor-marine-2',
+                'swinging-bridge-marina'        => 'swinging-bridge-marina-2',
+                'jolleys-marine-rv-ctr-inc'     => 'jolleys-marine-rv-ctr-inc-2',
+                'seven-winds-marina-inc'        => 'seven-winds-marina-inc-2',
+                'ashley-marine-llc-3'           => 'ashley-marine-llc',
+                'salty-boats'                   => 'salty-boats-2',
+                'ocean-marine'                  => 'ocean-marine-2',
+                'i-94-marine-watersports-llc'   => 'i-94-marine-watersports-llc-3',
+                'victory-marine'                => 'victory-marine-2',
+                'i-94-marine-watersports-llc-2' => 'i-94-marine-watersports-llc-3',
+                'premier-boating-centers-6'     => 'premier-boating-centers-7',
+            );
+        }
+
+        /**
+         * Departed with no survivor to point at. firefish-industries-ltd
+         * has zero rows across all three feeds and zero live pages in its
+         * slug family - two independent signals agreeing, which is what
+         * this list requires before it will 410 anything.
+         */
+        public function avalon_orphan_gone_list()
+        {
+            return array('firefish-industries-ltd');
+        }
+
+        /**
+         * Is this slug a LIVE store page - one that a location row owns?
+         *
+         * Both guards below turn on this. A page with no owning row is an
+         * orphan and does not count as live, which is exactly the
+         * distinction the whole map exists to make.
+         */
+        private function avalon_slug_is_owned($slug)
+        {
+            global $wpdb;
+            $table = $wpdb->prefix . 'store_locator';
+            $id = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT p.ID
+                   FROM {$wpdb->posts} p
+                   JOIN {$table} s ON s.sl_linked_postid = p.ID
+                  WHERE p.post_name   = %s
+                    AND p.post_type   = 'store_page'
+                    AND p.post_status = 'publish'
+                  LIMIT 1",
+                $slug
+            ));
+            return ($id > 0);
+        }
+
+        /**
+         * Serve the disposition. template_redirect, priority 1.
+         *
+         * Fires whether the request resolved to a post or 404ed, so the
+         * same code works before the orphan posts are deleted and after.
+         * That is what makes the two-phase rollout possible: prove the map
+         * while the posts still exist, then delete them.
+         */
+        public function avalon_orphan_redirect()
+        {
+            if (is_admin() || (defined('DOING_AJAX') && DOING_AJAX)) {
+                return;
+            }
+            if (empty($_SERVER['REQUEST_URI'])) {
+                return;
+            }
+
+            $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+            if (! is_string($path)) {
+                return;
+            }
+            if (! preg_match('#^/store/([a-z0-9\-]+)/?$#', $path, $m)) {
+                return;
+            }
+            $slug = $m[1];
+
+            $map  = $this->avalon_orphan_redirect_map();
+            $gone = $this->avalon_orphan_gone_list();
+            if (! isset($map[$slug]) && ! in_array($slug, $gone, true)) {
+                return;
+            }
+
+            //GUARD 1. SELF-DISABLING, and the reason this is safe to leave
+            //in place. Deleting an orphan frees its base slug; if SLP later
+            //creates a real page there, an unguarded map would hijack it.
+            //A live owned page always wins. This also means a slug repaired
+            //by avalon_relink_orphaned_pages() stops redirecting by itself.
+            if ($this->avalon_slug_is_owned($slug)) {
+                return;
+            }
+
+            if (in_array($slug, $gone, true)) {
+                global $wp_query;
+                status_header(410);
+                nocache_headers();
+                if (isset($wp_query) && is_a($wp_query, 'WP_Query')) {
+                    $wp_query->set_404();
+                }
+                return;
+            }
+
+            //GUARD 2. Never redirect into a dead end. If the target has
+            //itself been removed, let the 404 happen - an honest 404 beats
+            //a 301 into another 404.
+            if (! $this->avalon_slug_is_owned($map[$slug])) {
+                return;
+            }
+
+            wp_safe_redirect(home_url('/store/' . $map[$slug] . '/'), 301);
+            exit;
         }
 
         /**
@@ -910,6 +1188,8 @@ if (!class_exists('SLP_Avalon')){
                 'tier2_aborted'   => (bool) $this->avalon_state('tier2_aborted'),
                 'rows_removed'      => (int)  $this->avalon_state('rows_removed'),
                 'pages_destroyed'   => (int)  $this->avalon_state('pages_destroyed'),
+                'pages_relinked'    => (int)  $this->avalon_state('pages_relinked'),
+                'relink_aborted'    => (bool) $this->avalon_state('relink_aborted'),
                 'reconcile_aborted' => (bool) $this->avalon_state('reconcile_aborted'),
                 'stale_exclusions'=> $missing
             );
