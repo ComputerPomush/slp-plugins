@@ -126,26 +126,69 @@ foreach ( $orphans as $o ) {
 	$reason  = '';
 
 	if ( $has_meta ) {
-		$key = $norm( $meta_addr ) . '|' . $norm( $meta_city );
+		$na  = $norm( $meta_addr );
+		$nc  = $norm( $meta_city );
+		$key = $na . '|' . $nc;
+
 		if ( isset( $linked_by_addr[ $key ] ) ) {
-			$target  = $linked_by_addr[ $key ];
-			$basis   = 'postmeta address';
+			$target = $linked_by_addr[ $key ];
+			$basis  = 'postmeta address, exact';
+		} else {
+			// A NON-MATCH IS WEAK EVIDENCE. The feeds write one address
+			// several ways - rev25 s0.121 exists because of it - and
+			// dlrloc.csv carries "43466 North Interstate 94 Service"
+			// where DLTahoe.csv carries "43466 North Interstate 94 Serv"
+			// for the same dealer. r2 of this file matched exactly, found
+			// nothing, and called I-94 Marine DEPARTED while it was still
+			// selling. Two pages would have been 410'd.
+			//
+			// So try a prefix match within the same city before concluding
+			// anything. 12 characters is long enough that "43466 North"
+			// alone will not collide.
+			foreach ( $linked as $row ) {
+				if ( $norm( $row->sl_city ) !== $nc ) {
+					continue;
+				}
+				$ra = $norm( $row->sl_address );
+				if ( strlen( $na ) < 12 || strlen( $ra ) < 12 ) {
+					continue;
+				}
+				if ( strpos( $ra, $na ) === 0 || strpos( $na, $ra ) === 0 ) {
+					$target = $row;
+					$basis  = 'postmeta address, PREFIX - the feeds write '
+					        . 'this address two ways';
+					break;
+				}
+			}
+		}
+
+		if ( $target ) {
 			$verdict = 'REDIRECT';
 			$reason  = sprintf(
-				'%s, %s still in the location table as sl_id %d -> %d /%s/',
-				$meta_addr, $meta_city, $target->sl_id, $target->ID, $target->post_name
+				'[%s, %s] resolves to sl_id %d [%s] -> %d /%s/',
+				$meta_addr, $meta_city, $target->sl_id,
+				$target->sl_address, $target->ID, $target->post_name
 			);
-		} else {
+		} elseif ( count( $siblings ) === 0 ) {
+			// TWO INDEPENDENT SIGNALS AGREE: no row carries this address,
+			// and no live page exists in the slug family. Only then is
+			// "departed" a measurement rather than a guess.
 			$verdict = 'DEPARTED';
 			$reason  = sprintf(
-				'%s, %s has NO row in the location table. The dealer left; '
-				. 'this is not a surplus page for a surviving one. 410, or a '
-				. 'redirect to the nearest survivor, is a business decision.',
+				'[%s, %s] has no row AND no live page in the slug family. '
+				. 'Two independent signals agree the dealer left.',
 				$meta_addr, $meta_city
+			);
+		} else {
+			$verdict = 'REVIEW';
+			$reason  = sprintf(
+				'[%s, %s] matches no row, but %d live page(s) exist in the '
+				. 'slug family. A non-match on a free-text address is NOT '
+				. 'proof of departure - resolve by hand.',
+				$meta_addr, $meta_city, count( $siblings )
 			);
 		}
 	} elseif ( count( $siblings ) === 1 ) {
-		// No snapshot, but one live page in the family forces the target.
 		$target  = $siblings[0];
 		$basis   = 'slug family, single sibling';
 		$verdict = 'REDIRECT';

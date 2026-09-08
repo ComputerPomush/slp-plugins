@@ -272,7 +272,7 @@ $ToolFiles = @{
     'build/build-v021.py'       = @{ Md5 = 'e7a307b55c1897202186efd64d94c4ee'; Bytes = 22891 }
     'test/suite-v021.php'       = @{ Md5 = '90282a3a36f272da3ac465a3d67c5bd1'; Bytes = 22993 }
     'test/Verify-Suite021.ps1'  = @{ Md5 = 'e11ef74471e519ffde6ecc2e2daeab98';     Bytes = 7993 }
-    'test/orphan-report.php'    = @{ Md5 = 'a41e9925a7dc663eccadae17db051b51';     Bytes = 9314 }
+    'test/orphan-report.php'    = @{ Md5 = '189041fd5bc51882d21203f139f5b1c4';     Bytes = 10766 }
 }
 
 # Unchanged this release. store-locator-le/js belongs to the SLP plugin author
