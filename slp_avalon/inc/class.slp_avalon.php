@@ -201,7 +201,13 @@ if (!class_exists('SLP_Avalon')){
             }
             $region = !empty($country) ? '&region=' . $country : '';
             $callback = "&callback=avalon_init_gmaps";
-            return $google_api_url . $language . $region . $server_key . $callback;
+            // Pin the Maps JS release channel. With no v= parameter Google serves
+            // the weekly channel, which can change the control surface and the
+            // internal DOM between deploys - that is how gmp-internal-camera-control
+            // appeared in a map nobody had edited. quarterly still receives fixes,
+            // on a cadence we can plan around.
+            $api_version = "&v=quarterly";
+            return $google_api_url . $language . $region . $server_key . $callback . $api_version;
         }
 
         public function slp_ajax_find_locations_complete_filter($results){
@@ -1419,6 +1425,32 @@ if (!class_exists('SLP_Avalon')){
             $location = $slplus->currentLocation;
             $html = "";
             if ($location && ($location->latitude && $location->longitude)) {
+                // Presentation values are read here and echoed into the script below.
+                // This map deliberately does not touch the slplus JS global: WP Rocket's
+                // "Load JavaScript deferred" wraps SLP's inline localisation in a
+                // DOMContentLoaded callback, which turns its `const slplus` into a
+                // function-local binding no other script can reach. Reading the
+                // same values from PHP makes this map immune to that, and to any
+                // future optimiser that moves inline scripts around.
+                //
+                // map_end_icon, not map_home_icon: on a store page the dealer is a
+                // destination, not a search origin. Using map_home_icon here would
+                // also couple this map to the locator's home marker.
+                $map_icon = isset($slplus->options['map_end_icon']) ? trim((string) $slplus->options['map_end_icon']) : '';
+                $zoom = isset($slplus->options['zoom_level']) ? (int) $slplus->options['zoom_level'] : 12;
+                if ($zoom < 1 || $zoom > 21) {
+                    $zoom = 12;
+                }
+                // Validate the style server-side. A malformed value previously
+                // reached JSON.parse() at runtime and took the whole map down;
+                // now it degrades to an unstyled map instead.
+                $map_style_json = '';
+                if (! empty($slplus->options['google_map_style'])) {
+                    $decoded = json_decode((string) $slplus->options['google_map_style'], true);
+                    if (is_array($decoded)) {
+                        $map_style_json = wp_json_encode($decoded);
+                    }
+                }
                 ob_start(); ?>
                 <div style="clear:both">
                     <script>
@@ -1434,21 +1466,30 @@ if (!class_exists('SLP_Avalon')){
                         function avalon_init_location_map() {
                             const location_coords = get_location_coords();
                             let map_options = {
-                                zoom: 12,
+                                zoom: <?php echo $zoom; ?>,
                                 center: location_coords,
-                                gestureHandling: 'cooperative'
+                                gestureHandling: 'cooperative',
+                                // cameraControl false removes the combined pan-arrow
+                                // and zoom cluster (gmp-internal-camera-control),
+                                // leaving the plain +/- buttons below.
+                                cameraControl: false,
+                                zoomControl: true,
+                                mapTypeControl: true,
+                                streetViewControl: true,
+                                fullscreenControl: true
                             }
-                            if (slplus.options.google_map_style) {
-                                jQuery.extend(map_options, {
-                                    styles: JSON.parse(slplus.options.google_map_style),
-                                });
-                            }
+<?php if ($map_style_json !== '') : ?>
+                            map_options.styles = <?php echo $map_style_json; ?>;
+<?php endif; ?>
                             const map = new google.maps.Map(document.getElementById('avalon_location_map'), map_options);
-                            const marker = new google.maps.Marker({
+                            const marker_options = {
                                 position: location_coords,
-                                map: map,
-                                icon: slplus.options.map_home_icon
-                            });
+                                map: map
+                            };
+<?php if ($map_icon !== '') : ?>
+                            marker_options.icon = <?php echo wp_json_encode(esc_url_raw($map_icon)); ?>;
+<?php endif; ?>
+                            const marker = new google.maps.Marker(marker_options);
                         }
 
                         function get_location_coords() {
