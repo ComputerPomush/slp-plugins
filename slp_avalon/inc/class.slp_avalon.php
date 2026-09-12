@@ -1411,7 +1411,18 @@ if (!class_exists('SLP_Avalon')){
                 }
                 $url = get_site_url(null, "contact-dealer?store_id={$location_id}{$dealer_str}");
                 ob_start(); ?>
-                <div class="store_locator_single_contact_store"><a href="<?php echo $url; ?>" class="store_locator_contact_store_button btn button et_pb_button btn-primary theme-button btn-lg center" style="font-size:18px !important;">Contact Dealer</a></div>
+                <?php
+                // data-dealer-id carries the SLP location id to the click
+                // handler in slp_avalon.js, which writes it into Gravity Forms
+                // field 14_8. On /find-a-dealer/ main.js reads that id from a
+                // slp_results_wrapper_<id> or slp_info_bubble_<id> ancestor. A
+                // store page has neither, so the id travels on the anchor.
+                //
+                // No inline font-size here. It carried !important, which forced
+                // any stylesheet trying to match the locator button to escalate
+                // to !important as well. Presentation belongs in the theme.
+                ?>
+                <div class="store_locator_single_contact_store"><a href="<?php echo esc_url($url); ?>" class="store_locator_contact_store_button btn button et_pb_button btn-primary theme-button btn-lg center" data-dealer-id="<?php echo esc_attr($location_id); ?>">Contact Dealer</a></div>
             <?php
                 $html = ob_get_clean();
             }

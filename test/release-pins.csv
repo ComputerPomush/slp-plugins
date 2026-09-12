@@ -1,7 +1,7 @@
 RelativePath,MD5Hash
-slp-plugins\slp_avalon\assets\js\slp_avalon.js,61921f1feca574f9f4ba4b36b362d4a0
-slp-plugins\slp_avalon\inc\class.slp_avalon.php,960c8e0c91e5a22f417b417ec8b5835f
-slp-plugins\slp_avalon\slp_avalon.php,6ac762b02006ee3274da98aa7c107277
+slp-plugins\slp_avalon\assets\js\slp_avalon.js,461fb6b2e43decd9326f5d1014529b01
+slp-plugins\slp_avalon\inc\class.slp_avalon.php,efdedfd75f0ad15ed6ffde7fec0cd5e4
+slp-plugins\slp_avalon\slp_avalon.php,fb2da0394b4540b1437d3c00f0283070
 slp-plugins\.gitattributes,d6f1b5bc350f43a202b6abb91daa36ed
 slp-plugins\store-locator-le\js\slp_core.js,a751bea043c19472ec6453aff93f84a9
 slp-plugins\store-locator-le\js\slp_core.min.js,7924dad949f851d90ade9118c8bd045a

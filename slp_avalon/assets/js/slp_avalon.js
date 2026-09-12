@@ -1683,4 +1683,40 @@
       alert("Error: Your browser doesn't support geolocation.");
     }
   }
+
+  /**
+   * Store page Contact Dealer -> the shared contact-dealer modal.
+   *
+   * The modal, Gravity Form 14 and .modal-overlay are already rendered on
+   * store pages; only the wiring was missing. main.js binds the locator's
+   * own triggers beneath .results_wrapper and .slp_info_bubble ancestors
+   * that a store page does not have, and its third selector expects a class
+   * this anchor has never carried, so none of it fires here.
+   *
+   * Bound on the anchor's own class rather than on an ancestor: the markup
+   * around this button is frozen in post_content when the page is created
+   * and has already drifted from the page_template option, so an
+   * ancestor-keyed selector is not a stable thing to depend on. Keying on
+   * the class also guarantees no overlap with main.js.
+   *
+   * Returns early when the modal is absent, so the href stays a working
+   * link anywhere the popup markup is not rendered, and with JS disabled.
+   *
+   * Closing is not handled here. main.js binds .btn-cancel and
+   * .modal-overlay directly at ready against server-rendered markup.
+   *
+   * attr() not data(): jQuery data() coerces a numeric id to a Number and
+   * caches it. The form field wants the string exactly as emitted.
+   */
+  jQuery(document).on("click", "a.store_locator_contact_store_button", function (event) {
+    var $modal = jQuery(".contact-dealer--pop-up");
+    if ($modal.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    jQuery("#input_14_8").val(jQuery(this).attr("data-dealer-id") || "");
+    $modal.addClass("open-modal");
+    jQuery(".modal-overlay").addClass("show");
+    jQuery("body").addClass("overflow-hidden");
+  });
   
