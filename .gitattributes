@@ -23,3 +23,14 @@ build/** -text
 test/** -text
 *.ps1 -text
 .gitattributes -text
+#
+# .gitignore is not in release-pins.csv, but Verify measures it, and without
+# the line below a fresh clone under core.autocrlf=true checks it out CRLF at
+# 38 bytes against a pin taken on LF at 35. Reproduced 2026-09-13 in a
+# throwaway repo: attr/ gives ae084156d4bde43fffd71430b0e118d2 at 38 bytes,
+# attr/-text gives 11d4fb6a31ade9a270cd68463ebde22b at 35, which is the pin.
+# That produced a standing yellow NORMALISED row on every fresh-clone verify
+# from rev30 to rev31, and a warning that is always present is a warning
+# nobody reads. Deferred at v0.0.24 and again at v0.0.25 because
+# .gitattributes is itself pinned and moving it costs a new table.
+.gitignore -text
