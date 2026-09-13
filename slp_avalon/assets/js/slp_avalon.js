@@ -1720,3 +1720,88 @@
     jQuery("body").addClass("overflow-hidden");
   });
   
+  /**
+   * v0.0.25. Populate Gravity Form 14's three hidden fields from page
+   * state rather than from the click that opened the modal.
+   *
+   * The click is the wrong source twice over. A visitor arriving on
+   * /store/<slug>/#contact-dealer never makes it, and Gravity Forms
+   * discards anything written once when it re-renders the form through
+   * gform_ajax_frame_14 after a failed validation.
+   *
+   *   14_8  dealer id - a page constant on a store page, read from the
+   *         one anchor that carries it. Written only into an empty
+   *         field, so the locator's per-click value is never
+   *         overwritten. The locator has no anchor of this class, so
+   *         this is inert there.
+   *   14_12 Aimbase UserUid
+   *   14_13 Aimbase SessionUid
+   *
+   * typeof, not a bare reference. WP Rocket delays awa.js on every
+   * cached page, so Aimbase is undeclared - not merely falsy - until
+   * the visitor's first interaction. A bare truthiness test on that
+   * identifier throws a ReferenceError there rather than reading as
+   * false, which is Fault B3 in contact_dealer_aimbase.php.
+   *
+   * Called from three places because no one of them is sufficient:
+   * gform_post_render fires at first render and after every AJAX
+   * re-render but can precede awa.js; submit is authoritative but does
+   * not fire when Gravity Forms submits the form programmatically; the
+   * submit button's own click precedes both. The function is
+   * idempotent, so running three times costs nothing.
+   */
+  function avalonPopulateContactForm() {
+    var $dealer = jQuery("#input_14_8");
+    if ($dealer.length > 0 && jQuery.trim($dealer.val()) === "") {
+      var $anchor = jQuery("a.store_locator_contact_store_button[data-dealer-id]").first();
+      if ($anchor.length > 0) {
+        $dealer.val($anchor.attr("data-dealer-id") || "");
+      }
+    }
+
+    if (typeof Aimbase === "undefined" || !Aimbase || !Aimbase.Analytics) {
+      return;
+    }
+
+    var uid = "";
+    var sid = "";
+    try { uid = Aimbase.Analytics.GetUserUid() || ""; } catch (e) { uid = ""; }
+    try { sid = Aimbase.Analytics.GetSessionUid() || ""; } catch (e) { sid = ""; }
+
+    if (uid !== "") { jQuery("#input_14_12").val(uid); }
+    if (sid !== "") { jQuery("#input_14_13").val(sid); }
+  }
+
+  jQuery(document).on("gform_post_render", function () {
+    avalonPopulateContactForm();
+  });
+  jQuery(document).on("click", "#gform_submit_button_14", function () {
+    avalonPopulateContactForm();
+  });
+  jQuery(document).on("submit", "#gform_14", function () {
+    avalonPopulateContactForm();
+  });
+
+  /**
+   * v0.0.25. Open the modal for a visitor who arrived at
+   * /store/<slug>/#contact-dealer - the destination
+   * avalon_contact_dealer_redirect() sends /contact-dealer to.
+   *
+   * Mirrors the click handler's guard: no modal, no action. The page
+   * then degrades to the dealer's address block and tel: link, both
+   * already rendered server-side, which is the whole point of having a
+   * destination that is a real page rather than an error.
+   */
+  jQuery(function () {
+    if (window.location.hash !== "#contact-dealer") {
+      return;
+    }
+    var $modal = jQuery(".contact-dealer--pop-up");
+    if ($modal.length === 0) {
+      return;
+    }
+    $modal.addClass("open-modal");
+    jQuery(".modal-overlay").addClass("show");
+    jQuery("body").addClass("overflow-hidden");
+    avalonPopulateContactForm();
+  });

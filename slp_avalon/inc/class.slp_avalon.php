@@ -68,6 +68,10 @@ if (!class_exists('SLP_Avalon')){
             //v0.0.22 Part 2. Priority 1 so the map is consulted before any
             //other redirect handler can claim the request.
             add_action('template_redirect', array(self::$instance,'avalon_orphan_redirect'), 1);
+            //v0.0.25. Same priority, different path. The two handlers
+            //cannot collide: one matches ^/store/<slug>/?$ and the
+            //other ^/contact-dealer/?$.
+            add_action('template_redirect', array(self::$instance,'avalon_contact_dealer_redirect'), 1);
             add_filter('posts_where', array(self::$instance,'attachments_posts_where'), 10, 2);
             add_filter('slp_ajaxsql_queryparams',array(self::$instance,'slp_ajaxsql_queryparams'),999,2);
             // SLP Dealer Guard, Layer 3. Priority 20: after the priority-10
@@ -840,6 +844,116 @@ if (!class_exists('SLP_Avalon')){
          * rows, it is reviewable in a diff, and it dies with the release
          * that stops needing it.
          */
+        /**
+         * v0.0.25. /contact-dealer -> the dealer's own store page.
+         *
+         * A page is not the answer here. Gravity Form 14 is already
+         * rendered on every store page, and a second render of the same
+         * form takes a Gravity Forms instance suffix, which would break
+         * the element ids find-a-dealer-focus-trap.js hardcodes. So the
+         * request is sent back to the page that already holds the form.
+         *
+         * A fragment, not a query argument. Store pages are cached;
+         * ?contact=1 would either miss the cache or fragment it into
+         * variants. A fragment never reaches the server at all.
+         *
+         * Not keyed on the referrer. It is stripped by privacy settings
+         * and absent when a link is pasted or mailed - and it is not
+         * needed, because store_id is in the URL and this plugin owns
+         * the map from it to the page.
+         */
+        public function avalon_contact_dealer_redirect()
+        {
+            if (is_admin() || (defined('DOING_AJAX') && DOING_AJAX)) {
+                return;
+            }
+            if (empty($_SERVER['REQUEST_URI'])) {
+                return;
+            }
+
+            $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+            if (! is_string($path)) {
+                return;
+            }
+            if (! preg_match('#^/contact-dealer/?$#', $path)) {
+                return;
+            }
+
+            $store_id = isset($_GET['store_id']) ? (int) $_GET['store_id'] : 0;
+            $post_id  = $this->avalon_contact_dealer_resolve($store_id);
+
+            nocache_headers();
+
+            if ($post_id > 0) {
+                $permalink = get_permalink($post_id);
+                if (is_string($permalink) && $permalink !== '') {
+                    //302, not 301. The destination is derived from a query
+                    //argument, and a permanently cached redirect would
+                    //outlive any correction to the row behind it.
+                    wp_safe_redirect($permalink . '#contact-dealer', 302);
+                    exit;
+                }
+            }
+
+            //Unresolvable is not worth an error page. The locator is the
+            //honest destination for "which dealer is not known".
+            wp_safe_redirect(home_url('/find-a-dealer/'), 302);
+            exit;
+        }
+
+        /**
+         * v0.0.25. store_id -> published store_page ID, or 0.
+         *
+         * Two independent signals, in order of authority.
+         * sl_linked_postid is what SLP itself maintains and what the
+         * 308/308 reconcile is measured against. slp_location_id is this
+         * plugin's own meta, written when the page is created, and still
+         * names the right page when an SLP link has been broken after
+         * the fact.
+         *
+         * dealer_id travels in the URL and is deliberately not used for
+         * resolution. It lives in the extended-data table under a shape
+         * this method has not measured, and store_id is present in every
+         * anchor this plugin has ever emitted.
+         */
+        private function avalon_contact_dealer_resolve($store_id)
+        {
+            $store_id = (int) $store_id;
+            if ($store_id <= 0) {
+                return 0;
+            }
+
+            global $wpdb;
+            $table = $wpdb->prefix . 'store_locator';
+
+            $id = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT p.ID
+                   FROM {$table} s
+                   JOIN {$wpdb->posts} p ON p.ID = s.sl_linked_postid
+                  WHERE s.sl_id       = %d
+                    AND p.post_type   = 'store_page'
+                    AND p.post_status = 'publish'
+                  LIMIT 1",
+                $store_id
+            ));
+            if ($id > 0) {
+                return $id;
+            }
+
+            $id = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT p.ID
+                   FROM {$wpdb->postmeta} pm
+                   JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                  WHERE pm.meta_key   = 'slp_location_id'
+                    AND pm.meta_value = %s
+                    AND p.post_type   = 'store_page'
+                    AND p.post_status = 'publish'
+                  LIMIT 1",
+                (string) $store_id
+            ));
+            return ($id > 0) ? $id : 0;
+        }
+
         public function avalon_orphan_redirect_map()
         {
             return array(
