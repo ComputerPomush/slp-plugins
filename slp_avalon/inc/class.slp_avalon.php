@@ -4,6 +4,27 @@ if (!class_exists('SLP_Avalon')){
     class SLP_Avalon{
         private static $instance;
 
+        /**
+         * v0.0.26 Part 1. Schema version for the dealer-places table.
+         *
+         * Bumped whenever the CREATE TABLE in avalon_hours_install()
+         * changes. avalon_hours_maybe_install() compares this against
+         * the stored option and runs dbDelta when they differ, which is
+         * what makes an SFTP overwrite of an already-active plugin
+         * install a schema change. A version constant that is never
+         * bumped is the same defect as no gate at all.
+         *
+         * HOURS_DB_OPTION is stored AUTOLOADED, deliberately, and it is
+         * the only option in this plugin that should be. It is read on
+         * every request by the gate, so autoload is what makes the gate
+         * cost a string compare instead of a query. Contrast
+         * avalon_geocode_cache and avalon_geocode_overrides, both
+         * written with an explicit 'no' because they are large and read
+         * only during an import.
+         */
+        const HOURS_DB_VERSION = '1';
+        const HOURS_DB_OPTION  = 'avalon_hours_db_version';
+
         public static function instance(){
             if ( ! isset( self::$instance ) && ! ( self::$instance instanceof SLP_Avalon ) ) {
 
@@ -41,7 +62,20 @@ if (!class_exists('SLP_Avalon')){
         }
 
         public static function activate(){
-
+            //v0.0.26 Part 1. Fresh installs only.
+            //
+            //register_activation_hook fires when a plugin is activated
+            //and at no other time. Every environment this plugin is
+            //deployed to already has it active, and the deploy is an
+            //SFTP overwrite of the files in place - nothing
+            //re-activates. This call alone would create the table on no
+            //site currently in play.
+            //
+            //avalon_hours_maybe_install() on init is what actually
+            //installs the table on an existing site. This is here so a
+            //genuinely new install has its table before the first init
+            //rather than one request later.
+            self::avalon_hours_install();
         }
 
         private function includes(){
@@ -109,6 +143,20 @@ if (!class_exists('SLP_Avalon')){
             // $request; a registration passing fewer leaves it null and
             // strips nothing, silently. suite-v018 asserts all three.
             add_filter('rest_post_dispatch',array(self::$instance,'avalon_rest_strip_keys'),999,3);
+            // SLP Dealer Guard, hours storage. v0.0.26 Part 1.
+            //
+            // Priority 1 on init, not activation. See activate() for
+            // why activation cannot carry this on its own.
+            //
+            // Priority 1 rather than the default 10 so the table is in
+            // place before anything registered later can query it. It
+            // does not race SLP's post-type registration at 11 because
+            // it does not touch SLP - it reads one option and, on all
+            // but the first request after a schema bump, returns.
+            //
+            // add_action and not add_filter: this returns nothing and
+            // nothing consumes a return value.
+            add_action('init', array(self::$instance,'avalon_hours_maybe_install'), 1);
         }
 
         private function register_shortcodes(){
@@ -2473,6 +2521,160 @@ if (!class_exists('SLP_Avalon')){
          *
          * @return array
          */
+        /**
+         * v0.0.26 Part 1. The dealer-places table name.
+         *
+         * $wpdb->prefix and not base_prefix: each brand site has its own
+         * database and its own cache, which is the arithmetic s0.186
+         * ran - roughly 600 to 900 Enterprise calls a month across three
+         * sites against a 1,000 allowance, not 303 shared.
+         */
+        public static function avalon_hours_table(){
+            global $wpdb;
+            return $wpdb->prefix . 'avalon_dealer_places';
+        }
+
+        /**
+         * v0.0.26 Part 1. Create or migrate the dealer-places table.
+         *
+         * dbDelta is not SQL-tolerant and every constraint below is load
+         * bearing:
+         *
+         *   - TWO spaces after PRIMARY KEY. One space and dbDelta does
+         *     not recognise the line as a key at all.
+         *   - One field per line. It parses by line, not by comma.
+         *   - KEY, never INDEX.
+         *   - LOWERCASE type names. dbDelta compares this text against
+         *     DESCRIBE output, which MySQL returns lowercase. Uppercase
+         *     types make it issue the same ALTER TABLE on every run,
+         *     forever, and nothing reports it.
+         *   - No index prefix lengths. dbDelta mishandles them and can
+         *     re-add the same index indefinitely, which is why place_id
+         *     is varchar(191) and indexed whole rather than varchar(255)
+         *     indexed at (64). Google publishes no maximum place ID
+         *     length; 191 is the utf8mb4 index-safe width and every ID
+         *     the resolver has produced is far shorter.
+         *   - No CURRENT_TIMESTAMP defaults and no zero dates. MySQL 5.7
+         *     and 8.0 reject '0000-00-00' under the strict mode they
+         *     default to. Every timestamp here is written by PHP, in
+         *     GMT, with current_time('mysql', true).
+         *
+         * The SQL is assembled with implode("\n", ...) rather than
+         * written as a literal. This file is CRLF; a literal would carry
+         * CRLF into the statement, and while dbDelta does trim \r the
+         * dependence would be invisible and one reformat from breaking.
+         */
+        public static function avalon_hours_install(){
+            global $wpdb;
+
+            $table   = self::avalon_hours_table();
+            $collate = $wpdb->get_charset_collate();
+
+            $sql = implode("\n", array(
+                "CREATE TABLE {$table} (",
+                "  address_key char(12) not null,",
+                "  sl_id bigint(20) unsigned null default null,",
+                "  place_id varchar(191) null default null,",
+                "  place_status varchar(16) not null default 'pending',",
+                "  place_checked_at datetime null default null,",
+                "  hours_json longtext null default null,",
+                "  hours_status varchar(16) not null default 'pending',",
+                "  fetched_at datetime null default null,",
+                "  primary_type_display varchar(190) null default null,",
+                "  locality varchar(190) null default null,",
+                "  admin_area varchar(190) null default null,",
+                "  attribution_json text null default null,",
+                "  error_count smallint(5) unsigned not null default 0,",
+                "  last_error varchar(190) null default null,",
+                "  updated_at datetime null default null,",
+                "  PRIMARY KEY  (address_key),",
+                "  KEY sl_id (sl_id),",
+                "  KEY place_id (place_id),",
+                "  KEY hours_sweep (hours_status, fetched_at),",
+                "  KEY place_sweep (place_status, place_checked_at)",
+                ") {$collate};"
+            ));
+
+            require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+            $changes = dbDelta( $sql );
+
+            //A no-op dbDelta returns an empty array. Logging only on
+            //change keeps the PHP log quiet on the ordinary path and
+            //leaves a record of the one request that migrated.
+            if ( ! empty( $changes ) ) {
+                self::log( 'hours schema ' . self::HOURS_DB_VERSION . ': ' . print_r( $changes, true ) );
+            }
+
+            update_option( self::HOURS_DB_OPTION, self::HOURS_DB_VERSION );
+        }
+
+        /**
+         * v0.0.26 Part 1. The schema gate. s0.189.
+         *
+         * Runs on init priority 1 on every request. On all but the first
+         * after a deploy it reads one autoloaded option, compares two
+         * short strings and returns.
+         *
+         * The WP_INSTALLING guard matters because WordPress sets that
+         * constant during its own install and upgrade routines, where
+         * the options table may not be in a state worth trusting and
+         * DDL from a plugin is unwelcome.
+         *
+         * No lock. dbDelta is idempotent and two concurrent requests
+         * racing it produce the same table; the cost of losing the race
+         * is a duplicated no-op, not a corrupted schema.
+         */
+        public static function avalon_hours_maybe_install(){
+            if ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) {
+                return;
+            }
+            if ( get_option( self::HOURS_DB_OPTION ) === self::HOURS_DB_VERSION ) {
+                return;
+            }
+            self::avalon_hours_install();
+        }
+
+        /**
+         * v0.0.26 Part 1. Hours configuration.
+         *
+         * Shaped after avalon_import_config(): one defined() override per
+         * key with its default beside it, so there is one configuration
+         * idiom in this plugin rather than two - s0.192.
+         *
+         * THE TWO TTLs ARE CLAMPED, NOT DEFAULTED. Google's Places terms
+         * allow place_id to be held indefinitely and cap every other
+         * field at 30 days. A constant is something somebody can set to
+         * 60 in wp-config.php; a clamp is not. Enforcing the cap in code
+         * rather than leaving it to cache eviction is the second half of
+         * why the durable store is a table row and not a transient -
+         * s0.186 - and it is the stronger position to be in if the
+         * licence is ever the question.
+         *
+         * resolve_ceiling, details_ceiling and timeout have NO consumer
+         * in Part 1. They are declared here because Part 2 reads its
+         * contract from this method, and a contract written twice is a
+         * contract that eventually disagrees with itself.
+         */
+        public function avalon_hours_config(){
+            $positive = defined('AVALON_HOURS_POSITIVE_TTL_DAYS')
+                        ? (int) AVALON_HOURS_POSITIVE_TTL_DAYS : 30;
+            $negative = defined('AVALON_HOURS_NEGATIVE_TTL_DAYS')
+                        ? (int) AVALON_HOURS_NEGATIVE_TTL_DAYS : 7;
+
+            return array(
+                'enabled'           => defined('AVALON_HOURS_ENABLED')
+                                       ? (bool) AVALON_HOURS_ENABLED   : true,
+                'positive_ttl_days' => max( 1, min( 30, $positive ) ),
+                'negative_ttl_days' => max( 1, min( 30, $negative ) ),
+                'resolve_ceiling'   => defined('AVALON_HOURS_RESOLVE_CEILING')
+                                       ? (int) AVALON_HOURS_RESOLVE_CEILING : 50,
+                'details_ceiling'   => defined('AVALON_HOURS_DETAILS_CEILING')
+                                       ? (int) AVALON_HOURS_DETAILS_CEILING : 50,
+                'timeout'           => defined('AVALON_HOURS_TIMEOUT')
+                                       ? (int) AVALON_HOURS_TIMEOUT    : 8,
+            );
+        }
+
         public function avalon_rest_protected_slugs(){
             return array(
                 'google_server_key',
