@@ -69,7 +69,7 @@ import time
 import unicodedata
 from collections import Counter, defaultdict, OrderedDict
 
-TOOL_VERSION = "1.3.0"
+TOOL_VERSION = "1.4.2"
 
 # --------------------------------------------------------------------------
 # 1.  HEADER RESOLUTION
@@ -681,7 +681,10 @@ def build_adjudication(dealers, cache, nm_pairs):
 
 def build_query(d: dict) -> str:
     bits = [d["name"], d["address"]]
-    if d["unit"]:
+    #s0.222.  d['unit'] was split out of d['address'] by norm_street, and
+    #d['address'] here is the RAW line, which still contains it.  Appending
+    #unconditionally spelled it twice.
+    if d["unit"] and d["unit"].upper() not in norm_text(d["address"]).upper():
         bits.append(d["unit"])
     tail = squash("%s %s %s" % (d["city"], d["state"], d["zip"]))
     bits.append(tail)
@@ -756,6 +759,115 @@ def call_text_search(query: str, api_key: str, bias=None, region=""):
         return None, "HTTP %s" % e.code
     except Exception as e:                                    # noqa: BLE001
         return None, type(e).__name__
+
+
+LEGACY_ENDPOINT = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+
+
+def _scrub(text, api_key):
+    """Never let the key reach failures.csv.
+
+    On the legacy endpoint the key travels in the URL, and urllib puts the
+    failing URL in HTTPError.filename and in the str() of several errors.
+    Nothing below returns a message or a URL, so this should never fire -
+    which is exactly why it is here rather than trusted to be unnecessary.
+    """
+    s = str(text)
+    if api_key and api_key in s:
+        s = s.replace(api_key, "<redacted>")
+    return s
+
+
+def _legacy_to_new(result):
+    """One legacy result, in the shape the New API returns.
+
+    The caller reads id, displayName.text, formattedAddress and
+    location.latitude/longitude. Normalising here means the cache writer,
+    the review writer and the failure handler never learn which API ran.
+    """
+    loc = ((result.get("geometry") or {}).get("location") or {})
+    return {
+        "id":               result.get("place_id", ""),
+        "displayName":      {"text": result.get("name", "")},
+        "formattedAddress": result.get("formatted_address", ""),
+        "location":         {"latitude":  loc.get("lat", ""),
+                             "longitude": loc.get("lng", "")},
+    }
+
+
+#Statuses that describe the key or the project rather than the dealer.
+#One of these means every remaining call will fail the same way. s0.220.
+LEGACY_FATAL = ("REQUEST_DENIED", "OVER_QUERY_LIMIT")
+
+
+def call_text_search_legacy(query: str, api_key: str, bias=None, region=""):
+    """Legacy Text Search, normalised to the New response shape.
+
+    Returns (data, err) exactly as call_text_search does:
+      ({"places": [...]}, "")   a hit
+      ({"places": []},    "")   ZERO_RESULTS - a miss, NOT an error
+      (None, "FATAL <status>")  key or project level; stop the run
+      (None, "<detail>")        this query only
+    """
+    import urllib.parse
+    import urllib.request
+    import urllib.error
+
+    params = {"query": query, "key": api_key}
+    if bias:
+        #Legacy biases with location+radius, not a locationBias circle.
+        params["location"] = "%s,%s" % (bias[0], bias[1])
+        params["radius"] = str(int(BIAS_RADIUS_M))
+    if region in ("US", "CA"):
+        #Legacy wants a lowercase ccTLD here, not the CLDR code the New
+        #API takes in regionCode.
+        params["region"] = region.lower()
+
+    url = LEGACY_ENDPOINT + "?" + urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        #Never echo e.url or e.reason: the key is in the URL.
+        return None, "HTTP %s" % e.code
+    except Exception as e:                                    # noqa: BLE001
+        return None, _scrub(type(e).__name__, api_key)
+
+    #HTTP 200 AND AN ERROR IS THE LEGACY CONTRACT. The status line says
+    #nothing; the status FIELD is the outcome.
+    status = str(data.get("status", "")).upper()
+    if status == "OK":
+        results = data.get("results") or []
+        if not results:
+            return {"places": []}, ""
+        top = results[0]
+        #s0.223.  Text Search returns a STREET ADDRESS when it cannot find a
+        #business at one, and that result is shaped exactly like a hit: a
+        #place_id, a formatted_address, and a name which IS the address.
+        #Rockingham Marina came back as '1900 W Nickerson St #112' - an id
+        #with no business behind it, so Place Details would return no hours
+        #and the row would sit in the table looking resolved.
+        #
+        #A loud miss beats a silent wrong id, so this is an error with a
+        #named reason rather than a ZERO_RESULTS-style empty list: it lands
+        #in failures.csv where somebody can hand-resolve the dealer.
+        #
+        #Deliberately NOT scanning results[1:] for the first establishment.
+        #That finds A business near the address, which is not the same as
+        #finding THE dealer, and it would fail silently in the other
+        #direction.
+        if "establishment" not in (top.get("types") or []):
+            return None, _scrub("NOT_ESTABLISHMENT %s"
+                                % (",".join(top.get("types") or []) or "no types"),
+                                api_key)
+        return {"places": [_legacy_to_new(top)]}, ""
+    if status == "ZERO_RESULTS":
+        #A miss, deliberately not an error. Google not knowing a dealer is
+        #an outcome; calling it a fault would strike a valid address.
+        return {"places": []}, ""
+    if status in LEGACY_FATAL:
+        return None, _scrub("FATAL %s" % status, api_key)
+    return None, _scrub("STATUS %s" % (status or "no status"), api_key)
 
 
 # --------------------------------------------------------------------------
@@ -1035,6 +1147,13 @@ def main() -> int:
                          "address-key port (rev34 s0.193)")
     ap.add_argument("--expect-md5", action="append", default=[],
                     help="pin an input as FILE=MD5; repeatable")
+    #1.4.0.  Defaults to legacy because that is the endpoint that answers
+    #today: Places API (New) returns 403 SERVICE_DISABLED on project
+    #1038304488249.  Switching back is --api new, with no edit to this file.
+    ap.add_argument("--api", choices=("legacy", "new"), default="legacy",
+                    help="which Text Search to call. legacy (default) is "
+                         "maps.googleapis.com; new is places.googleapis.com "
+                         "and needs Places API (New) enabled.")
     args = ap.parse_args()
 
     feeds = [("dlrloc.csv", "AURA"), ("DLTahoe.csv", "TAHOE"), ("DLAvalon.csv", "AVALON")]
@@ -1169,15 +1288,33 @@ def main() -> int:
 
         budget = min(args.max_calls, len(to_resolve))
         print()
-        print("LIVE  field mask %s" % FIELD_MASK)
+        if args.api == "legacy":
+            search = call_text_search_legacy
+            print("LIVE  legacy  %s" % LEGACY_ENDPOINT)
+            print("      Places API (New) is disabled on this project; place_id "
+                  "is one namespace, so these IDs carry forward.")
+        else:
+            search = call_text_search
+            print("LIVE  new     %s" % ENDPOINT)
+            print("      field mask %s" % FIELD_MASK)
         print("      %d to resolve, ceiling %d, spending %d"
               % (len(to_resolve), args.max_calls, budget))
         review = []
+        fatal = ""
         for q in to_resolve[:budget]:
             bias = None
             if q["bias_lat"] != "" and q["bias_lng"] != "":
                 bias = (q["bias_lat"], q["bias_lng"])
-            data, err = call_text_search(q["query"], api_key, bias, q["region_code"])
+            data, err = search(q["query"], api_key, bias, q["region_code"])
+            #s0.220. A refusal aimed at the key or the project is not a
+            #property of this dealer, and every remaining call will fail
+            #the same way. Two runs spent 328 and 303 requests learning
+            #that one at a time.
+            if err and err.startswith("FATAL"):
+                fatal = err
+                failures.append({"dealer_key": q["dealer_key"],
+                                 "query": q["query"], "error": err})
+                break
             if err or not data or not data.get("places"):
                 failures.append({"dealer_key": q["dealer_key"],
                                  "query": q["query"], "error": err or "no result"})
@@ -1197,6 +1334,12 @@ def main() -> int:
                 })
                 resolved_now += 1
             time.sleep(args.sleep)
+
+        if fatal:
+            print()
+            print("  ABORTED after %d call(s): %s" % (resolved_now + len(failures), fatal))
+            print("  That status describes the key or the project, not the dealer.")
+            print("  Nothing further was attempted.")
 
         review.insert(0, {"dealer_key": REVIEW_NOTICE})
         outs.append((REVIEW_FILENAME, *write_csv(
@@ -1340,9 +1483,49 @@ def main() -> int:
           len(adj_pairs) == len(adjudication))
     check("review filename carries the delete instruction",
           "DELETE" in REVIEW_FILENAME and "RETAIN" in REVIEW_NOTICE)
-    check("no unresolved verdict once every pair has a place_id",
-          args.live or all(r["verdict"] == "unresolved" for r in adjudication)
-          or not adjudication)
+    #s0.221.  The old form was
+    #    args.live or all(verdict == unresolved) or not adjudication
+    #which conflates 'this run was not live' with 'nothing is resolved'.
+    #Once the cache holds place ids, a dry run legitimately produces real
+    #verdicts, is not live, and FAILED - every dry run, forever.  s0.207
+    #inverted twice in one day: silent when everything failed, screaming
+    #when nothing did.
+    #
+    #This is the invariant the label always claimed: a pair whose BOTH
+    #sides resolved must not still be sitting at 'unresolved'.  Vacuously
+    #true on an empty cache, exact on a full one, and independent of --live.
+    _both = [r for r in adjudication if r.get("place_id_a") and r.get("place_id_b")]
+    check("no unresolved verdict once both places are resolved",
+          all(r["verdict"] != "unresolved" for r in _both),
+          "%d of %d pair(s) fully resolved" % (len(_both), len(adjudication)))
+    #s0.207 INVERTED. Every check above is structural, so all of them hold
+    #perfectly while a live run resolves nothing and fails everything -
+    #which is what happened twice on 2026-09-14, both times exiting 0. The
+    #run summary already said so; the exit code did not.
+    #s0.224.  The r1 form of this guard was
+    #    (not live) or resolved_now > 0 or not failures
+    #which fires on a run whose only remaining dealer is genuinely not
+    #listed by Google - 302 cached, one NOT_ESTABLISHMENT, exit 1 forever.
+    #That is s0.221 again in the check written to fix s0.207.  Three times
+    #in one day a check has been wrong about WHICH condition it cared about.
+    #
+    #The guard exists to catch a broken API, not an unfindable dealer, so
+    #it sorts failures by KIND.  Systemic: a project or key refusal, an
+    #HTTP status, or a bare exception class name.  Data: no result,
+    #NOT_ESTABLISHMENT, a per-query status - all of which say Google
+    #answered and the answer was no.
+    _fatal = [f for f in failures if f["error"].startswith("FATAL")]
+    _systemic = [f for f in failures
+                 if f["error"].startswith("FATAL")
+                 or f["error"].startswith("HTTP")
+                 or " " not in f["error"]]
+    check("no fatal abort",
+          (not args.live) or not _fatal,
+          ("aborted on %s" % _fatal[0]["error"]) if _fatal else "")
+    check("live failures are dealer data, not a broken API",
+          (not args.live) or resolved_now > 0 or not _systemic,
+          "resolved %d, %d data failure(s), %d systemic"
+          % (resolved_now, len(failures) - len(_systemic), len(_systemic)))
 
     print()
     print("  to resolve: %d    cached: %d    resolved this run: %d    failures: %d"

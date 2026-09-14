@@ -9,5 +9,6 @@ slp-plugins\slp_avalon\inc\class.slp_avalon_addresskey.php,c663c7e3c70a995d14053
 slp-plugins\test\diff-address-key.php,479ee683b6a0ec3d0babaff8abecdc2e
 slp-plugins\build\build-addresskey.py,f197199f8450c76aaab1687ec7ea4524
 slp-plugins\build\probe-fold-drift.py,a3ddb2cd93582198efef15eda392d8a6
-slp-plugins\build\resolve-placeids.py,a29e6c7f2e5870b373ed214c306cd77a
+slp-plugins\build\resolve-placeids.py,93ab353a65c3d25c8bd0f608cc451eaa
 slp-plugins\build\fold15.json,a36f0004ff70915974e7c4ffbf3353bb
+slp-plugins\build\probe-legacy-adapter.py,52d2abf4473eb941c8009c25c15ba42f
