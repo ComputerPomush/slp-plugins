@@ -3164,9 +3164,256 @@ if (!class_exists('SLP_Avalon')){
         }
 
         /**
+         * v0.0.26 Part 3c. Load resolved place IDs into the queue.
+         *
+         * The resolver runs on the workstation, against Google, and
+         * spends. placeids.json is the record of what was paid for and
+         * the one artefact in this project that cannot be re-derived.
+         * This method is the only thing that puts it in the database.
+         *
+         * NEVER-RE-RESOLVE IS IN THE STATEMENT, NOT IN A BRANCH. The
+         * UPDATE carries AND place_status = pending in its WHERE. A
+         * PHP if() tests a status read a moment earlier; the WHERE
+         * tests the status the row holds now, so a row that resolved
+         * between the snapshot and the write is not overwritten.
+         * avalon_places_seed enforces the same rule by never naming
+         * place_id in its UPDATE; this is the same rule, stated the
+         * other way round because here the column IS being written.
+         *
+         * place_checked_at TAKES THE FILE'S resolved_utc, NOT THE
+         * IMPORT TIME. The column records when Google was asked. The
+         * file knows that and the import does not. It also keeps KEY
+         * place_sweep (place_status, place_checked_at) honest: import
+         * time would leave 300 rows claiming to be as fresh as the day
+         * they were loaded, and any later re-check sweep would believe
+         * it. An unparsable stamp falls back to import time, imports
+         * anyway and is counted as undated - the place ID is what was
+         * paid for, and a silent substitution is worse than a reported
+         * one.
+         *
+         * A DRY RUN WRITES NOTHING. No row, and no import-log record
+         * either. The log is a write.
+         *
+         * A PLACE ID HELD BY TWO KEYS IS NOT AN ERROR. address_key is
+         * the primary key and KEY place_id is deliberately not unique:
+         * two dealer accounts at one marina are two rows at one place.
+         * It is counted, and the groups are returned, because 300
+         * imported against 288 distinct reads as a defect to anyone
+         * who has not been told otherwise. Those groups are also the
+         * duplicate-dealer evidence the Option 4 audit wants, produced
+         * without a single call.
+         *
+         * @param string $path       file to read.
+         * @param bool   $apply      false reports and writes nothing.
+         * @param string $expect_md5 pin on the file. The CLI requires
+         *                           one to write; checked here if given.
+         * @return array counts, for the CLI and for the tests.
+         */
+        public function avalon_places_import( $path, $apply = false, $expect_md5 = '' ){
+            global $wpdb;
+
+            $out = array(
+                'file'         => is_string( $path ) ? $path : '',
+                'md5'          => '',
+                'bytes'        => 0,
+                'keys_in_file' => 0,
+                'rejected'     => 0,
+                'matched'      => 0,
+                'not_in_queue' => 0,
+                'imported'     => 0,
+                'already_ok'   => 0,
+                'other_status' => 0,
+                'raced'        => 0,
+                'undated'      => 0,
+                'distinct'     => 0,
+                'shared'       => 0,
+                'groups'       => array(),
+                'no_place_id'  => 0,
+                'error'        => '',
+            );
+
+            if ( ! is_string( $path ) || '' === $path || ! is_readable( $path ) ) {
+                $out['error'] = 'cannot read ' . $out['file'];
+                return $out;
+            }
+
+            $raw = file_get_contents( $path );
+            if ( false === $raw ) {
+                $out['error'] = 'read failed: ' . $out['file'];
+                return $out;
+            }
+            $out['bytes'] = strlen( $raw );
+            $out['md5']   = md5( $raw );
+
+            //Hash and length reported together, in one pass. s0.212.
+            //The pin is optional here and mandatory at the CLI when
+            //writing, because this method is also what the tests call.
+            if ( '' !== $expect_md5 && $out['md5'] !== strtolower( trim( $expect_md5 ) ) ) {
+                $out['error'] = 'md5 ' . $out['md5'] . ', expected '
+                                . strtolower( trim( $expect_md5 ) );
+                return $out;
+            }
+
+            $doc = json_decode( $raw, true );
+            if ( ! is_array( $doc ) || ! isset( $doc['dealers'] )
+                 || ! is_array( $doc['dealers'] ) ) {
+                $out['error'] = 'no dealers object in ' . $out['file'];
+                return $out;
+            }
+            $dealers             = $doc['dealers'];
+            $out['keys_in_file'] = count( $dealers );
+
+            $table = self::avalon_hours_table();
+
+            //One read of the whole queue, as avalon_places_seed does. At
+            //roughly 301 rows this is cheaper than 301 existence checks,
+            //and it makes no_place_id answerable without a second query.
+            $queue = array();
+            $found = $wpdb->get_results(
+                "SELECT address_key, place_status FROM {$table}", ARRAY_A
+            );
+            if ( is_array( $found ) ) {
+                foreach ( $found as $r ) {
+                    $queue[ $r['address_key'] ] = (string) $r['place_status'];
+                }
+            }
+
+            $now  = current_time( 'mysql', true );
+            $plan = array();
+            $seen = array();
+
+            foreach ( $dealers as $key => $rec ) {
+                $key = (string) $key;
+                $pid = '';
+                if ( is_array( $rec ) && isset( $rec['place_id'] )
+                     && is_string( $rec['place_id'] ) ) {
+                    $pid = trim( $rec['place_id'] );
+                }
+
+                //Width and whitespace only. Google publishes no place ID
+                //format and no maximum length, so a pattern assertion
+                //here would be this plugin inventing a contract Google
+                //has not offered. 191 is the column, and a value that
+                //does not fit it would be stored truncated and silently
+                //wrong. Every ID resolved so far is 27 characters, which
+                //is a fact about today and not a rule.
+                if ( '' === $pid || strlen( $pid ) > 191 || preg_match( '/\s/', $pid ) ) {
+                    $out['rejected']++;
+                    continue;
+                }
+
+                if ( ! array_key_exists( $key, $queue ) ) {
+                    $out['not_in_queue']++;
+                    continue;
+                }
+                $out['matched']++;
+
+                if ( self::PLACES_STATUS_OK === $queue[ $key ] ) {
+                    $out['already_ok']++;
+                    continue;
+                }
+                if ( self::PLACES_STATUS_PENDING !== $queue[ $key ] ) {
+                    $out['other_status']++;
+                    continue;
+                }
+
+                $stamp = '';
+                if ( is_array( $rec ) && isset( $rec['resolved_utc'] )
+                     && is_string( $rec['resolved_utc'] ) ) {
+                    $ts = strtotime( $rec['resolved_utc'] );
+                    if ( is_int( $ts ) && $ts > 0 ) {
+                        $stamp = gmdate( 'Y-m-d H:i:s', $ts );
+                    }
+                }
+                if ( '' === $stamp ) {
+                    $stamp = $now;
+                    $out['undated']++;
+                }
+
+                $plan[ $key ] = array( 'place_id' => $pid, 'stamp' => $stamp );
+                if ( ! isset( $seen[ $pid ] ) ) {
+                    $seen[ $pid ] = array();
+                }
+                $seen[ $pid ][] = $key;
+            }
+
+            $out['distinct'] = count( $seen );
+            foreach ( $seen as $pid => $keys ) {
+                if ( count( $keys ) > 1 ) {
+                    $out['shared']++;
+                    $out['groups'][ $pid ] = $keys;
+                }
+            }
+
+            if ( $apply ) {
+                foreach ( $plan as $key => $row ) {
+                    $n = $wpdb->query( $wpdb->prepare(
+                        "UPDATE {$table} SET place_id = %s, place_status = %s,"
+                        . " place_checked_at = %s, updated_at = %s"
+                        . " WHERE address_key = %s AND place_status = %s",
+                        $row['place_id'], self::PLACES_STATUS_OK, $row['stamp'],
+                        $now, $key, self::PLACES_STATUS_PENDING
+                    ) );
+                    if ( is_numeric( $n ) && (int) $n > 0 ) {
+                        $out['imported']++;
+                        continue;
+                    }
+                    //The snapshot said pending and the statement matched
+                    //nothing, so the row moved underneath. Counted, never
+                    //retried: a retry is the branch arguing with the WHERE
+                    //clause that just refused it.
+                    $out['raced']++;
+                }
+            } else {
+                $out['imported'] = count( $plan );
+            }
+
+            //Pending AND not covered by the file. Deliberately computed
+            //from the snapshot and the plan rather than from the post-write
+            //state, so the dry run and the apply report the same number.
+            //A dry run whose counts differ from the apply it predicts is
+            //not a dry run, it is a second thing to have to reconcile.
+            foreach ( $queue as $key => $status ) {
+                if ( self::PLACES_STATUS_PENDING === $status
+                     && ! isset( $plan[ $key ] ) ) {
+                    $out['no_place_id']++;
+                }
+            }
+
+            if ( $apply ) {
+                $this->avalon_import_log( array(
+                    'stage'        => 'places_import',
+                    'action'       => 'imported',
+                    'file_md5'     => $out['md5'],
+                    'keys_in_file' => $out['keys_in_file'],
+                    'matched'      => $out['matched'],
+                    'imported'     => $out['imported'],
+                    'already_ok'   => $out['already_ok'],
+                    'not_in_queue' => $out['not_in_queue'],
+                    'no_place_id'  => $out['no_place_id'],
+                    'distinct'     => $out['distinct'],
+                    'shared'       => $out['shared'],
+                    'raced'        => $out['raced'],
+                ) );
+                //avalon_import_log buffers into per-request state that
+                //slp_csv_processing_complete flushes at 500. Outside an
+                //import nothing flushes it, so the option copy is written
+                //here, exactly as the seed subcommand does. s0.192.
+                $this->avalon_flush_import_log( false );
+            }
+
+            return $out;
+        }
+
+        /**
          * v0.0.26 Part 3. WP-CLI: wp avalon places <subcommand>
          *
          *   seed    fold the locations table into the queue. Spends nothing.
+         *   import  load resolved place IDs from placeids.json into
+         *           the queue. --file=<path> is required and has no
+         *           default; --dry-run reports and writes nothing;
+         *           --expect-md5=<hash> is required to write. Spends
+         *           nothing - the file records calls already paid.
          *   status  counts by place_status. Spends nothing.
          *   reset   return failed keys to pending, so a corrected address is
          *           requeued without raw SQL. --key=<12 chars> for one.
@@ -3199,6 +3446,74 @@ if (!class_exists('SLP_Avalon')){
                     $out['updated'], $out['skipped'], $out['unmapped']
                 ) );
                 WP_CLI::success( 'seed complete' );
+                return;
+            }
+
+            if ( 'import' === $sub ) {
+                $file = isset( $assoc['file'] ) ? (string) $assoc['file'] : '';
+                $dry  = ! empty( $assoc['dry-run'] );
+                $pin  = isset( $assoc['expect-md5'] )
+                        ? (string) $assoc['expect-md5'] : '';
+
+                if ( '' === $file ) {
+                    WP_CLI::error( '--file=<path> is required and has no default.' );
+                    return;
+                }
+
+                //Writing requires the operator to state which file they
+                //believe they are writing from. Never-overwrite makes a
+                //repeat harmless but it also makes a WRONG import
+                //unrecoverable: reset only returns failed to pending, so
+                //300 wrong IDs would need hand-written SQL. The dry run
+                //prints the hash, so the pin is copied from the run that
+                //was actually read, not typed from memory. s0.204.
+                if ( ! $dry && '' === $pin ) {
+                    WP_CLI::error( '--expect-md5=<hash> is required to write.'
+                        . ' Run --dry-run first; it prints the hash.' );
+                    return;
+                }
+
+                $out = $this->avalon_places_import( $file, ! $dry, $pin );
+
+                if ( '' !== $out['error'] ) {
+                    WP_CLI::error( $out['error'] );
+                    return;
+                }
+
+                WP_CLI::log( sprintf( 'file    %s', $out['file'] ) );
+                WP_CLI::log( sprintf( 'md5     %s  bytes %d',
+                    $out['md5'], $out['bytes'] ) );
+                WP_CLI::log( sprintf(
+                    'in file %d  rejected %d  matched %d  not in queue %d',
+                    $out['keys_in_file'], $out['rejected'],
+                    $out['matched'], $out['not_in_queue']
+                ) );
+                WP_CLI::log( sprintf(
+                    '%s %d  already ok %d  other status %d  raced %d  undated %d',
+                    $dry ? 'would import' : 'imported     ',
+                    $out['imported'], $out['already_ok'],
+                    $out['other_status'], $out['raced'], $out['undated']
+                ) );
+                WP_CLI::log( sprintf(
+                    'distinct ids %d  shared by >1 key %d  queued with no place id %d',
+                    $out['distinct'], $out['shared'], $out['no_place_id']
+                ) );
+
+                //The shared groups are the duplicate-dealer audit, free.
+                //Printed on the dry run because that is the run somebody
+                //sits and reads; the apply is the one they want short.
+                if ( $dry && ! empty( $out['groups'] ) ) {
+                    WP_CLI::log( '' );
+                    WP_CLI::log( 'place IDs holding more than one dealer key:' );
+                    foreach ( $out['groups'] as $place => $keys ) {
+                        WP_CLI::log( sprintf( '  %-30s %s',
+                            $place, implode( ' ', $keys ) ) );
+                    }
+                }
+
+                WP_CLI::success( $dry
+                    ? 'dry run, nothing written'
+                    : 'import complete' );
                 return;
             }
 
