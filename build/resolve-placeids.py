@@ -69,7 +69,7 @@ import time
 import unicodedata
 from collections import Counter, defaultdict, OrderedDict
 
-TOOL_VERSION = "1.1.0"
+TOOL_VERSION = "1.3.0"
 
 # --------------------------------------------------------------------------
 # 1.  HEADER RESOLUTION
@@ -216,7 +216,8 @@ CA_PROVINCES = {
     "ALBERTA": "AB", "BRITISH COLUMBIA": "BC", "MANITOBA": "MB",
     "NEW BRUNSWICK": "NB", "NEWFOUNDLAND AND LABRADOR": "NL",
     "NEWFOUNDLAND": "NL", "NORTHWEST TERRITORIES": "NT", "NOVA SCOTIA": "NS",
-    "NUNAVUT": "NU", "ONTARIO": "ON", "PRINCE EDWARD ISLAND": "PE",
+    "NUNAVUT": "NU", "ONTARIO": "ON", "ONT": "ON",
+    "PRINCE EDWARD ISLAND": "PE",
     "QUEBEC": "QC", "QUÉBEC": "QC", "SASKATCHEWAN": "SK", "YUKON": "YT",
 }
 CA_CODES = set(CA_PROVINCES.values())
@@ -410,6 +411,7 @@ def load_feed(path: str, brand_label: str):
                 "zip": postal,
                 "zip_raw": get("zip"),
                 "country": country,
+                "country_raw": get("country"),
                 "url": get("url"),
                 "host": norm_host(get("url")),
                 "phone": get("phone"),
@@ -488,6 +490,14 @@ def build_dealers(all_rows: list):
             flags.append("no_phone")
         if len({r["unit"] for r in rows if r["unit"]}) > 1:
             flags.append("unit_variant")
+        # The state is part of the key basis.  A value that resolves to
+        # neither a US state nor a Canadian province enters the key
+        # verbatim, so a later correction to the map re-keys the dealer
+        # and orphans its stored place_id.  Report it while that is still
+        # cheap.  "ONT" was found this way on 2026-09-14.
+        st = rep["state"]
+        if not (len(st) == 2 and (st in US_CODES or st in CA_CODES)):
+            flags.append("state_unresolved")
 
         d = {
             "dealer_key": key,
@@ -528,6 +538,7 @@ def build_dealers(all_rows: list):
                     "host_conflict": " | ".join(hosts),
                     "identifier_conflict": " | ".join(ids),
                     "unit_variant": " | ".join(sorted({r["unit"] for r in rows if r["unit"]})),
+                    "state_unresolved": " | ".join(sorted({r["state"] for r in rows})),
                 }.get(f, ""),
                 "source_rows": d["source_rows"],
             })
@@ -760,6 +771,258 @@ def write_csv(path: str, rows: list, fields: list):
     return md5_of(path), os.path.getsize(path)
 
 
+# --------------------------------------------------------------------------
+# 7.  KEY VECTORS  --  the oracle for the PHP address-key port (rev34 s0.193)
+# --------------------------------------------------------------------------
+#
+# Each entry is (vid, note, address, city, state, zip, country).  These are the
+# five raw fields that feed dealer_key and nothing else; name, phone and url do
+# not enter the key and are not modelled here.
+#
+# COVERAGE IS ASSERTED, NOT ASSUMED.  emit_key_vectors() fails if any suffix,
+# directional, unit word, highway regex or postal branch is left undriven by
+# the real rows plus these vectors combined.
+
+SYNTH_VECTORS = (
+    # -- every SUFFIXES entry, including the eleven the feeds never use ------
+    ("sfx-street",   "STREET->ST",      "100 MAPLE STREET",       "ALPHA", "MI", "49001", "USA"),
+    ("sfx-road",     "ROAD->RD",        "100 MAPLE ROAD",         "ALPHA", "MI", "49001", "USA"),
+    ("sfx-avenue",   "AVENUE->AVE",     "100 MAPLE AVENUE",       "ALPHA", "MI", "49001", "USA"),
+    ("sfx-av",       "AV->AVE",         "100 MAPLE AV",           "ALPHA", "MI", "49001", "USA"),
+    ("sfx-drive",    "DRIVE->DR",       "100 MAPLE DRIVE",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-highway",  "HIGHWAY->HWY",    "100 MAPLE HIGHWAY",      "ALPHA", "MI", "49001", "USA"),
+    ("sfx-hiway",    "HIWAY->HWY",      "100 MAPLE HIWAY",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-boulevard","BOULEVARD->BLVD", "100 MAPLE BOULEVARD",    "ALPHA", "MI", "49001", "USA"),
+    ("sfx-lane",     "LANE->LN",        "100 MAPLE LANE",         "ALPHA", "MI", "49001", "USA"),
+    ("sfx-court",    "COURT->CT",       "100 MAPLE COURT",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-place",    "PLACE->PL",       "100 MAPLE PLACE",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-parkway",  "PARKWAY->PKWY",   "100 MAPLE PARKWAY",      "ALPHA", "MI", "49001", "USA"),
+    ("sfx-circle",   "CIRCLE->CIR",     "100 MAPLE CIRCLE",       "ALPHA", "MI", "49001", "USA"),
+    ("sfx-terrace",  "TERRACE->TER",    "100 MAPLE TERRACE",      "ALPHA", "MI", "49001", "USA"),
+    ("sfx-trail",    "TRAIL->TRL",      "100 MAPLE TRAIL",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-route",    "ROUTE->RTE",      "100 MAPLE ROUTE",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-turnpike", "TURNPIKE->TPKE",  "100 MAPLE TURNPIKE",     "ALPHA", "MI", "49001", "USA"),
+    ("sfx-expwy",    "EXPRESSWAY->EXPY","100 MAPLE EXPRESSWAY",   "ALPHA", "MI", "49001", "USA"),
+    ("sfx-square",   "SQUARE->SQ",      "100 MAPLE SQUARE",       "ALPHA", "MI", "49001", "USA"),
+    ("sfx-point",    "POINT->PT",       "100 MAPLE POINT",        "ALPHA", "MI", "49001", "USA"),
+    ("sfx-crossing", "CROSSING->XING",  "100 MAPLE CROSSING",     "ALPHA", "MI", "49001", "USA"),
+    ("sfx-extension","EXTENSION->EXT",  "100 MAPLE EXTENSION",    "ALPHA", "MI", "49001", "USA"),
+
+    # -- every DIRECTIONALS entry, including the four the feeds never use ----
+    ("dir-n",  "NORTH->N",      "100 NORTH MAPLE ST",     "ALPHA", "MI", "49001", "USA"),
+    ("dir-s",  "SOUTH->S",      "100 SOUTH MAPLE ST",     "ALPHA", "MI", "49001", "USA"),
+    ("dir-e",  "EAST->E",       "100 EAST MAPLE ST",      "ALPHA", "MI", "49001", "USA"),
+    ("dir-w",  "WEST->W",       "100 WEST MAPLE ST",      "ALPHA", "MI", "49001", "USA"),
+    ("dir-ne", "NORTHEAST->NE", "100 NORTHEAST MAPLE ST", "ALPHA", "MI", "49001", "USA"),
+    ("dir-nw", "NORTHWEST->NW", "100 NORTHWEST MAPLE ST", "ALPHA", "MI", "49001", "USA"),
+    ("dir-se", "SOUTHEAST->SE", "100 SOUTHEAST MAPLE ST", "ALPHA", "MI", "49001", "USA"),
+    ("dir-sw", "SOUTHWEST->SW", "100 SOUTHWEST MAPLE ST", "ALPHA", "MI", "49001", "USA"),
+
+    # -- every UNIT_WORDS entry.  The unit is held OUT of street_key, so each
+    #    of these must produce the SAME street_key as unit-none below.
+    ("unit-none",      "no unit",        "100 MAPLE ST",              "ALPHA", "MI", "49001", "USA"),
+    ("unit-ste",       "STE + lookahead","100 MAPLE ST STE 4",        "ALPHA", "MI", "49001", "USA"),
+    ("unit-suite",     "SUITE",          "100 MAPLE ST SUITE 4",      "ALPHA", "MI", "49001", "USA"),
+    ("unit-unit",      "UNIT",           "100 MAPLE ST UNIT 4",       "ALPHA", "MI", "49001", "USA"),
+    ("unit-apt",       "APT",            "100 MAPLE ST APT 4",        "ALPHA", "MI", "49001", "USA"),
+    ("unit-apartment", "APARTMENT",      "100 MAPLE ST APARTMENT 4",  "ALPHA", "MI", "49001", "USA"),
+    ("unit-bldg",      "BLDG",           "100 MAPLE ST BLDG 4",       "ALPHA", "MI", "49001", "USA"),
+    ("unit-building",  "BUILDING",       "100 MAPLE ST BUILDING 4",   "ALPHA", "MI", "49001", "USA"),
+    ("unit-rm",        "RM",             "100 MAPLE ST RM 4",         "ALPHA", "MI", "49001", "USA"),
+    ("unit-room",      "ROOM",           "100 MAPLE ST ROOM 4",       "ALPHA", "MI", "49001", "USA"),
+    ("unit-fl",        "FL",             "100 MAPLE ST FL 4",         "ALPHA", "MI", "49001", "USA"),
+    ("unit-floor",     "FLOOR",          "100 MAPLE ST FLOOR 4",      "ALPHA", "MI", "49001", "USA"),
+    ("unit-hash-sep",  "# as own token", "100 MAPLE ST # 4",          "ALPHA", "MI", "49001", "USA"),
+    ("unit-hash-join", "#4 one token",   "100 MAPLE ST #4",           "ALPHA", "MI", "49001", "USA"),
+    # Terminal unit word with NOTHING after it: exercises the i+1 bounds guard.
+    ("unit-terminal",  "trailing STE",   "100 MAPLE ST STE",          "ALPHA", "MI", "49001", "USA"),
+    # Two units in one line: both consumed, street_key still bare.
+    ("unit-double",    "STE then #",     "100 MAPLE ST STE 4 # 9",    "ALPHA", "MI", "49001", "USA"),
+    # A unit word LEADING the line, before the house number.
+    ("unit-leading",   "STE first",      "STE 4 100 MAPLE ST",        "ALPHA", "MI", "49001", "USA"),
+
+    # -- the three highway regexes, each alternation arm -------------------
+    ("hwy-us-spaced",  "U S HIGHWAY",    "100 U S HIGHWAY 31",     "ALPHA", "MI", "49001", "USA"),
+    ("hwy-us-hwy",     "US HWY",         "100 US HWY 31",          "ALPHA", "MI", "49001", "USA"),
+    ("hwy-us-dash",    "US-",            "100 US-31",              "ALPHA", "MI", "49001", "USA"),
+    ("hwy-st-highway", "STATE HIGHWAY",  "100 STATE HIGHWAY 55",   "ALPHA", "MI", "49001", "USA"),
+    ("hwy-st-hwy",     "STATE HWY",      "100 STATE HWY 55",       "ALPHA", "MI", "49001", "USA"),
+    ("hwy-st-route",   "STATE ROUTE",    "100 STATE ROUTE 55",     "ALPHA", "MI", "49001", "USA"),
+    ("hwy-st-rte",     "STATE RTE",      "100 STATE RTE 55",       "ALPHA", "MI", "49001", "USA"),
+    ("hwy-st-rd",      "STATE RD",       "100 STATE RD 55",        "ALPHA", "MI", "49001", "USA"),
+    ("hwy-co-road",    "COUNTY ROAD",    "100 COUNTY ROAD 7",      "ALPHA", "MI", "49001", "USA"),
+    ("hwy-co-rd",      "COUNTY RD",      "100 COUNTY RD 7",        "ALPHA", "MI", "49001", "USA"),
+    ("hwy-co-route",   "COUNTY ROUTE",   "100 COUNTY ROUTE 7",     "ALPHA", "MI", "49001", "USA"),
+    ("hwy-co-rte",     "COUNTY RTE",     "100 COUNTY RTE 7",       "ALPHA", "MI", "49001", "USA"),
+
+    # -- punctuation and the ampersand expansion ---------------------------
+    ("punct-amp",    "& -> AND",        "100 MAPLE & OAK RD",     "ALPHA", "MI", "49001", "USA"),
+    ("punct-dots",   "periods stripped","100 N. MAPLE ST.",       "ALPHA", "MI", "49001", "USA"),
+    ("punct-commas", "commas stripped", "100 MAPLE ST, REAR",     "ALPHA", "MI", "49001", "USA"),
+    ("punct-slash",  "non-alnum class", "100 MAPLE ST / REAR",    "ALPHA", "MI", "49001", "USA"),
+    ("punct-squash", "runs of space",   "100    MAPLE     ST",    "ALPHA", "MI", "49001", "USA"),
+    ("punct-tab",    "tab is space",    "100\tMAPLE\tST",         "ALPHA", "MI", "49001", "USA"),
+
+    # -- NFKD.  ZERO non-ASCII bytes exist in any feed, so nothing below is
+    #    reachable from production data.  It is reachable from a future feed,
+    #    and a PHP port without ext-intl will silently disagree here.
+    ("nfkd-acute",   "E ACUTE precomposed", "100 CAF\u00c9 RD",       "MONTR\u00c9AL", "QC", "H3Z 2Y7", "CANADA"),
+    ("nfkd-combine", "E + U+0301",          "100 CAFE\u0301 RD",      "MONTREAL",   "QC", "H3Z 2Y7", "CANADA"),
+    ("nfkd-umlaut",  "U UMLAUT",            "100 M\u00dcLLER RD",     "ALPHA",      "MI", "49001",   "USA"),
+    ("nfkd-tilde",   "N TILDE",             "100 PE\u00d1A RD",       "ALPHA",      "MI", "49001",   "USA"),
+    ("nfkd-cedilla", "C CEDILLA",           "100 FRAN\u00c7OIS RD",   "ALPHA",      "MI", "49001",   "USA"),
+    ("nfkd-ligature","FI LIGATURE -> FI",   "100 \ufb01SHER RD",      "ALPHA",      "MI", "49001",   "USA"),
+    ("nfkd-fullwid", "FULLWIDTH DIGITS",    "\uff11\uff10\uff10 MAPLE RD",  "ALPHA", "MI", "49001", "USA"),
+    ("nfkd-nbsp",    "NBSP is not \\s in PHP","100\u00a0MAPLE RD",      "ALPHA",      "MI", "49001",   "USA"),
+    ("nfkd-quebec",  "QUEBEC accented",     "100 MAPLE RD",         "QUEBEC CITY","QU\u00c9BEC", "G1R 5P3", "CANADA"),
+
+    # -- postal forms -------------------------------------------------------
+    ("zip-us5",      "plain ZIP5",      "100 MAPLE RD", "ALPHA", "MI", "49001",      "USA"),
+    ("zip-us9",      "ZIP+4 hyphen",    "100 MAPLE RD", "ALPHA", "MI", "49001-1234", "USA"),
+    ("zip-us9nodash","ZIP+4 no hyphen", "100 MAPLE RD", "ALPHA", "MI", "490011234",  "USA"),
+    ("zip-uspad",    "leading space",   "100 MAPLE RD", "ALPHA", "MI", " 49001 ",    "USA"),
+    ("zip-ca-space", "CA with space",   "100 MAPLE RD", "BETA",  "ON", "P0M 3E0",    "CANADA"),
+    ("zip-ca-tight", "CA no space",     "100 MAPLE RD", "BETA",  "ON", "P0M3E0",     "CANADA"),
+    ("zip-ca-dash",  "CA hyphenated",   "100 MAPLE RD", "BETA",  "ON", "P0M-3E0",    "CANADA"),
+    ("zip-ca-lower", "CA lowercase",    "100 MAPLE RD", "BETA",  "ON", "p0m 3e0",    "CANADA"),
+    ("zip-junk",     "unparseable",     "100 MAPLE RD", "ALPHA", "MI", "N/A",        "USA"),
+    ("zip-empty",    "empty postal",    "100 MAPLE RD", "ALPHA", "MI", "",           "USA"),
+
+    # -- state forms.  ONT is the live one: it is in neither map, so it falls
+    #    through norm_state unchanged and enters the key AS 'ONT'.  Two real
+    #    rows do this today (dlrloc.csv:89, DLAvalon.csv:226).
+    ("st-code-us",   "2-letter US",     "100 MAPLE RD", "ALPHA", "MI",            "49001",   "USA"),
+    ("st-code-ca",   "2-letter CA",     "100 MAPLE RD", "BETA",  "ON",            "P0M 3E0", "CANADA"),
+    ("st-spelled-us","spelled US",      "100 MAPLE RD", "ALPHA", "MICHIGAN",      "49001",   "USA"),
+    ("st-spelled-ca","spelled CA",      "100 MAPLE RD", "BETA",  "ONTARIO",       "P0M 3E0", "CANADA"),
+    ("st-ont",       "ONT resolves to ON","100 MAPLE RD","BETA", "ONT",           "P0M 3E0", "CANADA"),
+    ("st-bogus",     "no such code",    "100 MAPLE RD", "BETA",  "ZZZ",           "P0M 3E0", "CANADA"),
+    ("st-lower",     "lowercase code",  "100 MAPLE RD", "ALPHA", "mi",            "49001",   "USA"),
+    ("st-dotted",    "M.I. dotted",     "100 MAPLE RD", "ALPHA", "M.I.",          "49001",   "USA"),
+    ("st-spaced",    "padded",          "100 MAPLE RD", "ALPHA", "  MI  ",        "49001",   "USA"),
+    ("st-empty",     "empty state",     "100 MAPLE RD", "ALPHA", "",              "49001",   "USA"),
+    ("st-dc",        "DISTRICT OF COLUMBIA", "100 MAPLE RD", "ALPHA", "DISTRICT OF COLUMBIA", "20001", "USA"),
+
+    # -- country inference --------------------------------------------------
+    ("ctry-usa",     "USA",                "100 MAPLE RD", "ALPHA", "MI", "49001",   "USA"),
+    ("ctry-us",      "US",                 "100 MAPLE RD", "ALPHA", "MI", "49001",   "US"),
+    ("ctry-long",    "UNITED STATES",      "100 MAPLE RD", "ALPHA", "MI", "49001",   "UNITED STATES"),
+    ("ctry-canada",  "CANADA",             "100 MAPLE RD", "BETA",  "ON", "P0M 3E0", "CANADA"),
+    ("ctry-can",     "CAN",                "100 MAPLE RD", "BETA",  "ON", "P0M 3E0", "CAN"),
+    ("ctry-frompost","blank, CA postal",   "100 MAPLE RD", "BETA",  "ON", "P0M 3E0", ""),
+    ("ctry-fromstate","blank, CA-only code","100 MAPLE RD","BETA",  "AB", "",        ""),
+    ("ctry-usstate", "blank, US code",     "100 MAPLE RD", "ALPHA", "MI", "",        ""),
+    ("ctry-unknown", "blank everything",   "100 MAPLE RD", "ALPHA", "",   "",        ""),
+
+    # -- city normalisation -------------------------------------------------
+    ("city-dots",    "ST. CLAIR",       "100 MAPLE RD", "ST. CLAIR",   "MI", "49001", "USA"),
+    ("city-lower",   "lowercase",       "100 MAPLE RD", "st clair",    "MI", "49001", "USA"),
+    ("city-spaced",  "runs of space",   "100 MAPLE RD", "ST   CLAIR",  "MI", "49001", "USA"),
+    ("city-hyphen",  "hyphen retained", "100 MAPLE RD", "WINSTON-SALEM","NC","27101", "USA"),
+
+    # -- degenerate ---------------------------------------------------------
+    ("deg-empty",    "all blank",       "",             "",      "",   "",        ""),
+    ("deg-addr-only","address only",    "100 MAPLE RD", "",      "",   "",        ""),
+    ("deg-numeric",  "digits only",     "100",          "ALPHA", "MI", "49001",   "USA"),
+    ("deg-punct",    "punctuation only","...",          "ALPHA", "MI", "49001",   "USA"),
+)
+
+KEYVECTOR_FIELDS = [
+    "vid", "class", "note", "feed", "row",
+    "raw_address", "raw_city", "raw_state", "raw_zip", "raw_country",
+    "street_key", "unit", "city_key", "state", "zip", "postal_country",
+    "country", "basis", "dealer_key",
+]
+
+
+def key_vector(vid, klass, note, feed, row, address, city, state, zipc, country):
+    """Run the five raw fields through the exact path load_feed() uses."""
+    street, unit = norm_street(address)
+    postal, postal_country = norm_postal(zipc)
+    st = norm_state(state)
+    ctry = norm_country(country, st, postal_country)
+    city_key = norm_text(city).replace(".", "")
+    basis = "|".join([ctry, st, city_key, postal, street])
+    return {
+        "vid": vid, "class": klass, "note": note, "feed": feed, "row": row,
+        "raw_address": address, "raw_city": city, "raw_state": state,
+        "raw_zip": zipc, "raw_country": country,
+        "street_key": street, "unit": unit, "city_key": city_key,
+        "state": st, "zip": postal, "postal_country": postal_country,
+        "country": ctry, "basis": basis,
+        "dealer_key": hashlib.sha1(basis.encode("utf-8")).hexdigest()[:12],
+    }
+
+
+def emit_key_vectors(all_rows, out_dir):
+    """Write keyvectors.csv and assert branch coverage.  Returns (rows, ok)."""
+    vectors = []
+    for r in all_rows:
+        vectors.append(key_vector(
+            "real-%s-%d" % (r["feed_brand"].lower(), r["row"]), "real", "",
+            r["feed"], r["row"],
+            r["address"], r["city"], r["state"], r["zip_raw"], r["country_raw"]))
+    for vid, note, a, c, s, z, k in SYNTH_VECTORS:
+        vectors.append(key_vector(vid, "synth", note, "", 0, a, c, s, z, k))
+
+    path = os.path.join(out_dir, "keyvectors.csv")
+    m, n = write_csv(path, vectors, KEYVECTOR_FIELDS)
+
+    # ---- coverage.  Absence of a driven branch is a FAILURE, not a note. ---
+    seen_sfx, seen_dir, seen_unit = set(), set(), set()
+    seen_re, seen_postal, seen_state = set(), set(), set()
+    for v in vectors:
+        pre = norm_text(v["raw_address"]).replace("&", " AND ")
+        pre = re.sub(r"[.,]", " ", pre)
+        if re.search(r"\bU\s*S\s*HIGHWAY\b|\bUS\s*HWY\b|\bUS-\b", pre):
+            seen_re.add("us")
+        if re.search(r"\bSTATE\s+(HIGHWAY|HWY|ROUTE|RTE|RD)\b", pre):
+            seen_re.add("state")
+        if re.search(r"\bCOUNTY\s+(ROAD|RD|ROUTE|RTE)\b", pre):
+            seen_re.add("county")
+        for t in squash(re.sub(r"[^A-Z0-9# ]+", " ", pre)).split():
+            if t in SUFFIXES:
+                seen_sfx.add(t)
+            if t in DIRECTIONALS:
+                seen_dir.add(t)
+            if t in UNIT_WORDS:
+                seen_unit.add(t)
+            if t.startswith("#"):
+                seen_unit.add("#")
+        if v["postal_country"] == "CA":
+            seen_postal.add("ca")
+        elif v["postal_country"] == "US":
+            seen_postal.add("us")
+        else:
+            seen_postal.add("none")
+        if v["raw_state"] and not v["state"]:
+            seen_state.add("blanked")
+        if len(v["state"]) == 2 and v["state"] in US_CODES:
+            seen_state.add("us")
+        elif len(v["state"]) == 2 and v["state"] in CA_CODES:
+            seen_state.add("ca")
+        elif v["state"]:
+            seen_state.add("fallthrough")
+        if any(ord(ch) > 127 for ch in (v["raw_address"] + v["raw_city"] + v["raw_state"])):
+            seen_state.add("nonascii")
+
+    missing = []
+    if set(SUFFIXES) - seen_sfx:
+        missing.append("SUFFIXES %s" % sorted(set(SUFFIXES) - seen_sfx))
+    if set(DIRECTIONALS) - seen_dir:
+        missing.append("DIRECTIONALS %s" % sorted(set(DIRECTIONALS) - seen_dir))
+    if set(UNIT_WORDS) - seen_unit:
+        missing.append("UNIT_WORDS %s" % sorted(set(UNIT_WORDS) - seen_unit))
+    if {"us", "state", "county"} - seen_re:
+        missing.append("highway regexes %s" % sorted({"us", "state", "county"} - seen_re))
+    if {"us", "ca", "none"} - seen_postal:
+        missing.append("postal branches %s" % sorted({"us", "ca", "none"} - seen_postal))
+    if {"us", "ca", "fallthrough", "nonascii"} - seen_state:
+        missing.append("state branches %s"
+                       % sorted({"us", "ca", "fallthrough", "nonascii"} - seen_state))
+    return vectors, path, m, n, missing
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Resolve one Google Place ID per unique dealer.")
     ap.add_argument("--feeds", required=True, help="directory holding the three CSVs")
@@ -767,6 +1030,9 @@ def main() -> int:
     ap.add_argument("--live", action="store_true", help="actually spend Text Search calls")
     ap.add_argument("--max-calls", type=int, default=0, help="hard ceiling on live calls")
     ap.add_argument("--sleep", type=float, default=0.12, help="seconds between live calls")
+    ap.add_argument("--emit-keys", action="store_true",
+                    help="write keyvectors.csv, the oracle for the PHP "
+                         "address-key port (rev34 s0.193)")
     ap.add_argument("--expect-md5", action="append", default=[],
                     help="pin an input as FILE=MD5; repeatable")
     args = ap.parse_args()
@@ -1012,6 +1278,25 @@ def main() -> int:
 
     keys = [d["dealer_key"] for d in dealers]
     check("dealer_key unique", len(keys) == len(set(keys)))
+
+    if args.emit_keys:
+        kv, kv_path, kv_md5, kv_bytes, kv_missing = emit_key_vectors(
+            all_rows, args.out)
+        print("  %-46s %s %s" % ("keyvectors.csv written",
+                                 "PASS",
+                                 "%d vectors  md5 %s  bytes %d"
+                                 % (len(kv), kv_md5, kv_bytes)))
+        check("key vectors drive every normaliser branch",
+              not kv_missing, "; ".join(kv_missing))
+        real = [v for v in kv if v["class"] == "real"]
+        check("emitted real vectors match the feed row count",
+              len(real) == len(all_rows),
+              "%d vectors / %d rows" % (len(real), len(all_rows)))
+        by_row = {(r["feed"], r["row"]): r["dealer_key"] for r in all_rows}
+        drift = sum(1 for v in real
+                    if by_row.get((v["feed"], v["row"])) != v["dealer_key"])
+        check("replay from raw inputs reproduces the loader key",
+              drift == 0, "%d of %d diverged" % (drift, len(real)))
 
     # Invariant 1: blanking Identifier must not move a single key.  This is the
     # negative control for the empty-Identifier workaround -- if the key ever

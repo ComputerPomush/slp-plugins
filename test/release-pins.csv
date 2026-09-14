@@ -5,3 +5,9 @@ slp-plugins\slp_avalon\slp_avalon.php,ece98000d2af9f9a77374bd240942001
 slp-plugins\.gitattributes,04834ee26f61a5bea9c2a1af9334d9fa
 slp-plugins\store-locator-le\js\slp_core.js,a751bea043c19472ec6453aff93f84a9
 slp-plugins\store-locator-le\js\slp_core.min.js,7924dad949f851d90ade9118c8bd045a
+slp-plugins\slp_avalon\inc\class.slp_avalon_addresskey.php,c663c7e3c70a995d1405365a3647b77f
+slp-plugins\test\diff-address-key.php,479ee683b6a0ec3d0babaff8abecdc2e
+slp-plugins\build\build-addresskey.py,f197199f8450c76aaab1687ec7ea4524
+slp-plugins\build\probe-fold-drift.py,a3ddb2cd93582198efef15eda392d8a6
+slp-plugins\build\resolve-placeids.py,a29e6c7f2e5870b373ed214c306cd77a
+slp-plugins\build\fold15.json,a36f0004ff70915974e7c4ffbf3353bb

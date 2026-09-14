@@ -1,3 +1,82 @@
 *.log
 build/out*/
 test/orphans.csv
+
+# ---------------------------------------------------------------------
+# s0.199. slp-plugins is PUBLIC.
+#
+# build/out*/ matches DIRECTORIES NAMED out*, and matched nothing else.
+# build/placeid/ held dealers-unique.csv, queries.csv and header-map.csv
+# untracked and unignored - one blanket `git add -A`, which is GitHub
+# Desktop's default staging, from publishing 303 dealer addresses and the
+# exact query strings built from them.
+#
+# git check-ignore -v returned NOTHING for build/placeid/ on 2026-09-13.
+# That silence was the measurement. These rules are the answer to it.
+#
+# A tracked file is unaffected by .gitignore, so none of the patterns
+# below can drop anything already committed. Verified against the tracked
+# set: build/ holds only build-v0NN.py and resolve-placeids.py, and the
+# only tracked csv in the repo is test/release-pins.csv. Neither is
+# matched here.
+# ---------------------------------------------------------------------
+
+# Anything the resolver reads or writes.
+build/placeid/
+build/**/*.csv
+build/**/*.json
+
+# s0.207.  fold15.json is the probe's 15.0.0 REFERENCE DATA, not something the
+# resolver reads or writes, and build/probe-fold-drift.py prints FAIL and exits
+# when it is not beside the script.  Committing the probe without it ships a
+# diagnostic that cannot run from a clone.
+#
+# It is Unicode mappings only - no dealer records, no keys, no query strings -
+# so the s0.199 disclosure rationale above does not reach it.  Withdrawn
+# caution, rev35 addendum.
+#
+# A negation works here because line 27 is a FILE pattern.  It would NOT work
+# under build/placeid/, which is a DIRECTORY exclusion - git never descends
+# into an excluded directory, so no rule inside it can be reversed.  Both
+# directions measured in a throwaway repo, by exit code, 2026-09-14.
+!build/fold15.json
+
+# The three brand feeds, and everything derived from them, at any depth.
+dlrloc.csv
+DLAvalon.csv
+DLTahoe.csv
+dealers-unique.csv
+queries.csv
+header-map.csv
+anomalies.csv
+adjudication.csv
+placeids.json
+review-DELETE-AFTER-TRIAGE.csv
+
+# s0.207.  build/__pycache__/resolve-placeids.cpython-314.pyc was untracked
+# AND unignored on 2026-09-14 - measured, not assumed, by replaying the
+# working tree's 48 untracked paths against this file: a blanket `git add -A`
+# would have staged it alongside the four intended files.  Compiled bytecode
+# in a public repo is noise at best.
+__pycache__/
+*.pyc
+
+# Patch scripts are private-repo tooling. build-v0NN.py and
+# resolve-placeids.py are tracked here and are not matched by this.
+build/patch-*.py
+
+# ---------------------------------------------------------------------
+# Credential-bearing artefacts. s0.180 found 34 committed WP Rocket
+# settings exports across four PRIVATE repos, at least one carrying a
+# populated minify_css_key, plus 23 page captures - every store and
+# find-a-dealer capture carries the SLP REST key in the inline slplus
+# JSON, because SLP emits it into every page.
+#
+# The private repo gained these rules at rev33. This one had none, and a
+# public repo is the worse place for a key by a wide margin.
+# ---------------------------------------------------------------------
+wp-rocket-settings-*.json
+view-source_*.html
+bk-*
+*.sql
+.env
