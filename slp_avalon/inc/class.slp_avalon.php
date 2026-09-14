@@ -25,6 +25,39 @@ if (!class_exists('SLP_Avalon')){
         const HOURS_DB_VERSION = '1';
         const HOURS_DB_OPTION  = 'avalon_hours_db_version';
 
+        /**
+         * v0.0.26 Part 3. The place-resolution queue.
+         *
+         * PLACES_CRON_HOOK is named once. The schedule gate, the callback
+         * registration and the CLI all reach for it, and a hook name
+         * spelled three times is a hook name that eventually disagrees
+         * with itself.
+         *
+         * It is named 'resolve' although Part 3a only purges on it.
+         * Renaming a cron hook after it has been scheduled strands the
+         * old event in the options table with no listener, so the name is
+         * chosen for what the callback becomes, not for what it does now.
+         *
+         * PLACES_ERROR_CEILING is the definitive-negative strike count,
+         * consumed in Part 3b. Three NOT_FOUNDs do not become a find on
+         * the fourth: the known bad set is data defects - ten dealers at
+         * 0,0, one longitude of -9838239, 'ONTARIO' against a US-only
+         * get_states() - not flaky lookups. A transport error is NOT a
+         * strike, or one bad network afternoon fails half the queue
+         * permanently.
+         *
+         * PLACES_STATUS_PENDING must equal the column default that
+         * avalon_hours_install() writes for BOTH place_status and
+         * hours_status. It is spelled to match, not chosen, and
+         * suite-v027 asserts the two agree rather than trusting this
+         * comment.
+         */
+        const PLACES_CRON_HOOK      = 'avalon_places_resolve';
+        const PLACES_ERROR_CEILING  = 3;
+        const PLACES_STATUS_PENDING = 'pending';
+        const PLACES_STATUS_OK      = 'ok';
+        const PLACES_STATUS_FAILED  = 'failed';
+
         public static function instance(){
             if ( ! isset( self::$instance ) && ! ( self::$instance instanceof SLP_Avalon ) ) {
 
@@ -175,6 +208,36 @@ if (!class_exists('SLP_Avalon')){
             // add_action and not add_filter: this returns nothing and
             // nothing consumes a return value.
             add_action('init', array(self::$instance,'avalon_hours_maybe_install'), 1);
+            // SLP Dealer Guard, place-resolution queue. v0.0.26 Part 3.
+            //
+            // Priority 20 on completion is forced, not chosen.
+            // csv_processing_complete_func at 10 deletes rows for dealers
+            // no longer in the feed, so seeding before it would create a
+            // queue entry for a dealer about to be destroyed.
+            // avalon_flush_import_log at 500 writes the run record, so
+            // seeding must land before that for its counts to appear in
+            // it. 20 is the only band that satisfies both.
+            add_action('slp_csv_processing_complete', array(self::$instance,'avalon_places_seed'), 20);
+            //
+            // Priority 1 on init, for the reason avalon_hours_maybe_install
+            // is there rather than on activation: activation does not fire
+            // on a database-import setup, and the Tahoe and Avalon
+            // promotion wave is exactly that case. A schedule that exists
+            // only if activation ran is a schedule that silently does not
+            // exist on four of six environments.
+            add_action('init', array(self::$instance,'avalon_places_maybe_schedule'), 1);
+            //
+            // The callback, registered unconditionally. A scheduled event
+            // whose hook has no listener still consumes its slot and
+            // reports nothing.
+            add_action(self::PLACES_CRON_HOOK, array(self::$instance,'avalon_places_cron'));
+            //
+            // WP-CLI, inline and guarded - deliberately NOT a new file.
+            // A require_once of a file that has not landed yet is fatal,
+            // and Part 2 already paid that deploy-ordering tax once.
+            if ( defined('WP_CLI') && WP_CLI ) {
+                WP_CLI::add_command( 'avalon places', array(self::$instance,'avalon_places_cli') );
+            }
         }
 
         private function register_shortcodes(){
@@ -2849,6 +2912,329 @@ if (!class_exists('SLP_Avalon')){
             }
 
             return $node;
+        }
+        /**
+         * v0.0.26 Part 3. The schedule gate.
+         *
+         * Runs on init priority 1. wp_next_scheduled() reads the
+         * autoloaded cron array and scans it; it is not a query.
+         *
+         * The first fire is deliberately an hour out rather than
+         * immediate, so a deploy cannot run the callback inside the same
+         * request that installed it.
+         *
+         * There is no unschedule branch here, on purpose. Clearing the
+         * event belongs to deactivation. A gate that both adds and removes
+         * on every request is a gate that fights an administrator who
+         * cleared the event deliberately.
+         */
+        public function avalon_places_maybe_schedule(){
+            if ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) {
+                return;
+            }
+            if ( wp_next_scheduled( self::PLACES_CRON_HOOK ) ) {
+                return;
+            }
+            wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::PLACES_CRON_HOOK );
+        }
+
+        /**
+         * v0.0.26 Part 3. Seed the queue from the locations table.
+         *
+         * THE ADDRESS PASSED IS sl_address ALONE. sl_address2 is NOT part
+         * of the key. vector() takes exactly five raw_* fields and address2
+         * is not one of them; the unit is split off the single address line
+         * by norm_street() and does not enter the basis, which is
+         * country|state|city_key|zip|street_key. Passing address2 here
+         * would produce keys that no longer match
+         * build/placeid/keyvectors.csv and the Python-to-PHP port would
+         * diverge silently.
+         *
+         * THE 1:N FOLD. 638 feed rows collapse to roughly 303 keys, so the
+         * sl_id stored is one of N by construction. MIN() makes which one
+         * deterministic: same feed state, same value, every time.
+         * Most-recently-imported is not - sl_id is AUTO_INCREMENT and the
+         * reconcile is delete-and-re-add, so a dealer that leaves the feed
+         * and returns churns the column while nothing about the dealer
+         * changed, and slp_get_all_locations() carries no ORDER BY, which
+         * makes 'most recent' whatever MySQL happens to return.
+         *
+         * NOTHING MAY QUERY THIS TABLE BY sl_id. It holds one of N and the
+         * other N-1 dealers get silence. Every read path computes the key
+         * and hits the primary key. KEY sl_id is a debugging join, not a
+         * lookup path.
+         *
+         * An existing row is updated ONLY when its sl_id actually moved. An
+         * unconditional UPDATE on every import would rewrite 303 rows with
+         * their own values and leave updated_at meaning 'an import
+         * happened' rather than 'this row changed'.
+         *
+         * place_id and place_status are never named in the UPDATE. That is
+         * where never-re-resolve is enforced - in the writer, not only in
+         * the reader - so a re-import cannot reset a row that resolved.
+         *
+         * @return array counts, for the CLI and for the tests.
+         */
+        public function avalon_places_seed(){
+            global $wpdb;
+
+            $out = array(
+                'rows'    => 0, 'keys'    => 0, 'inserted' => 0,
+                'updated' => 0, 'skipped' => 0, 'unmapped' => 0,
+            );
+
+            if ( ! class_exists( 'SLP_Avalon_AddressKey' ) ) {
+                self::log( 'places seed aborted: SLP_Avalon_AddressKey not loaded' );
+                return $out;
+            }
+
+            $table = self::avalon_hours_table();
+            $rows  = $this->slp_get_all_locations();
+            if ( ! is_array( $rows ) ) {
+                $rows = array();
+            }
+            $out['rows'] = count( $rows );
+
+            //s0.209. Reset first, so the count below is this pass's and not
+            //the accumulation of everything since the request began.
+            SLP_Avalon_AddressKey::reset_unmapped();
+
+            $fold = array();
+            foreach ( $rows as $row ) {
+                $vector = SLP_Avalon_AddressKey::vector( array(
+                    'raw_address' => isset( $row['sl_address'] ) ? $row['sl_address'] : '',
+                    'raw_city'    => isset( $row['sl_city']    ) ? $row['sl_city']    : '',
+                    'raw_state'   => isset( $row['sl_state']   ) ? $row['sl_state']   : '',
+                    'raw_zip'     => isset( $row['sl_zip']     ) ? $row['sl_zip']     : '',
+                    'raw_country' => isset( $row['sl_country'] ) ? $row['sl_country'] : '',
+                ) );
+
+                //A row with neither a street nor a city still hashes to a
+                //perfectly good twelve characters. Queuing it would spend a
+                //Places call on nothing. vector() is called rather than
+                //dealer_key() precisely so this is answerable.
+                if ( '' === $vector['street_key'] && '' === $vector['city_key'] ) {
+                    $out['skipped']++;
+                    continue;
+                }
+
+                $key   = $vector['dealer_key'];
+                $sl_id = isset( $row['sl_id'] ) ? (int) $row['sl_id'] : 0;
+                if ( ! isset( $fold[ $key ] ) || $sl_id < $fold[ $key ] ) {
+                    $fold[ $key ] = $sl_id;
+                }
+            }
+            $out['keys'] = count( $fold );
+
+            //One read of the whole queue. At roughly 303 keys this is
+            //cheaper than 303 existence checks, and it makes the insert and
+            //update partitions decidable without leaning on affected_rows,
+            //which returns 0 for an update that changed nothing and cannot
+            //be told apart from a miss.
+            $existing = array();
+            $found    = $wpdb->get_results( "SELECT address_key, sl_id FROM {$table}", ARRAY_A );
+            if ( is_array( $found ) ) {
+                foreach ( $found as $r ) {
+                    $existing[ $r['address_key'] ] = (int) $r['sl_id'];
+                }
+            }
+
+            $now = current_time( 'mysql', true );
+            foreach ( $fold as $key => $sl_id ) {
+                if ( ! array_key_exists( $key, $existing ) ) {
+                    $wpdb->insert(
+                        $table,
+                        array(
+                            'address_key'  => $key,
+                            'sl_id'        => $sl_id,
+                            'place_status' => self::PLACES_STATUS_PENDING,
+                            'updated_at'   => $now,
+                        ),
+                        array( '%s', '%d', '%s', '%s' )
+                    );
+                    $out['inserted']++;
+                    continue;
+                }
+                if ( $existing[ $key ] === $sl_id ) {
+                    continue;
+                }
+                $wpdb->update(
+                    $table,
+                    array( 'sl_id' => $sl_id, 'updated_at' => $now ),
+                    array( 'address_key' => $key ),
+                    array( '%d', '%s' ),
+                    array( '%s' )
+                );
+                $out['updated']++;
+            }
+
+            //s0.209. unmapped() returns array('count'=>int,'codepoints'=>array),
+            //which is TRUTHY on a clean import. Read ['count'], never the
+            //array, or the alarm fires on every single run.
+            $unmapped        = SLP_Avalon_AddressKey::unmapped();
+            $out['unmapped'] = (int) $unmapped['count'];
+
+            $this->avalon_import_log( array(
+                'stage'    => 'places_seed',
+                'action'   => 'seeded',
+                'rows'     => $out['rows'],
+                'keys'     => $out['keys'],
+                'inserted' => $out['inserted'],
+                'updated'  => $out['updated'],
+                'skipped'  => $out['skipped'],
+                'unmapped' => $out['unmapped'],
+            ) );
+
+            return $out;
+        }
+
+        /**
+         * v0.0.26 Part 3. The TTL purge.
+         *
+         * NOT GATED ON enabled, deliberately. Google's Places terms permit
+         * place_id to be held indefinitely and cap every other field at 30
+         * days. Setting AVALON_HOURS_ENABLED false to turn the feature off
+         * must not leave cached hours sitting past their TTL forever - the
+         * expiry is a licence obligation, not a feature. The resolve branch
+         * Part 3b adds to avalon_places_cron() is the part that reads
+         * enabled.
+         *
+         * place_id, place_status and place_checked_at are never touched
+         * here, for the same reason: they are the one thing the terms let
+         * us keep.
+         *
+         * Two TTLs, two sweeps. A negative result is cheap to refetch and
+         * worth retiring sooner; one cutoff for both would hold whichever
+         * is longer against each.
+         *
+         * Driven off KEY hours_sweep (hours_status, fetched_at), which
+         * exists for exactly this query.
+         *
+         * @return int rows cleared.
+         */
+        public function avalon_places_purge(){
+            global $wpdb;
+
+            $cfg    = $this->avalon_hours_config();
+            $table  = self::avalon_hours_table();
+            $now    = current_time( 'mysql', true );
+            $purged = 0;
+
+            $sweeps = array(
+                self::PLACES_STATUS_OK     => (int) $cfg['positive_ttl_days'],
+                self::PLACES_STATUS_FAILED => (int) $cfg['negative_ttl_days'],
+            );
+
+            foreach ( $sweeps as $status => $days ) {
+                $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
+                $n = $wpdb->query(
+                    $wpdb->prepare(
+                        "UPDATE {$table} SET hours_json = NULL, attribution_json = NULL,"
+                        . " hours_status = %s, fetched_at = NULL, updated_at = %s"
+                        . " WHERE hours_status = %s AND fetched_at IS NOT NULL AND fetched_at < %s",
+                        self::PLACES_STATUS_PENDING,
+                        $now,
+                        $status,
+                        $cutoff
+                    )
+                );
+                if ( is_numeric( $n ) ) {
+                    $purged += (int) $n;
+                }
+            }
+
+            if ( $purged > 0 ) {
+                self::log( 'places purge: ' . $purged . ' row(s) past TTL cleared' );
+            }
+            return $purged;
+        }
+
+        /**
+         * v0.0.26 Part 3. The cron callback.
+         *
+         * Part 3a runs the purge only. Resolution - the queue read, the
+         * Places Text Search call, the dead-place_id requeue and the
+         * PLACES_ERROR_CEILING strike rule - is Part 3b, because it spends,
+         * and a spend path ships behind a dry run with a pre-fire baseline
+         * rather than alongside a queue that has never run against a real
+         * table.
+         */
+        public function avalon_places_cron(){
+            $this->avalon_places_purge();
+        }
+
+        /**
+         * v0.0.26 Part 3. WP-CLI: wp avalon places <subcommand>
+         *
+         *   seed    fold the locations table into the queue. Spends nothing.
+         *   status  counts by place_status. Spends nothing.
+         *   reset   return failed keys to pending, so a corrected address is
+         *           requeued without raw SQL. --key=<12 chars> for one.
+         *
+         * NO CAPABILITY CHECK, deliberately. WP-CLI runs as no user, so
+         * current_user_can() is false on the happy path. manage_slp_user is
+         * worse still: it is granted at plugin activation, which a
+         * database-import environment never ran.
+         *
+         * Invoke with --skip-plugins=revslider, never a bare --skip-plugins:
+         * skipping slp_avalon unregisters this command and leaves
+         * SLP_Avalon_AddressKey unloaded.
+         */
+        public function avalon_places_cli( $args, $assoc = array() ){
+            global $wpdb;
+
+            $sub   = isset( $args[0] ) ? (string) $args[0] : 'status';
+            $table = self::avalon_hours_table();
+
+            if ( 'seed' === $sub ) {
+                $out = $this->avalon_places_seed();
+                //avalon_import_log buffers into per-request state that
+                //slp_csv_processing_complete flushes at 500. Outside an
+                //import nothing flushes it, so the option copy is written
+                //here. s0.192 - one logging idiom, not a second for the CLI.
+                $this->avalon_flush_import_log( false );
+                WP_CLI::log( sprintf(
+                    'rows %d  keys %d  inserted %d  updated %d  skipped %d  unmapped %d',
+                    $out['rows'], $out['keys'], $out['inserted'],
+                    $out['updated'], $out['skipped'], $out['unmapped']
+                ) );
+                WP_CLI::success( 'seed complete' );
+                return;
+            }
+
+            if ( 'reset' === $sub ) {
+                $key = isset( $assoc['key'] ) ? (string) $assoc['key'] : '';
+                $now = current_time( 'mysql', true );
+                if ( '' !== $key ) {
+                    $n = $wpdb->query( $wpdb->prepare(
+                        "UPDATE {$table} SET place_status = %s, error_count = 0,"
+                        . " last_error = NULL, updated_at = %s"
+                        . " WHERE address_key = %s AND place_status = %s",
+                        self::PLACES_STATUS_PENDING, $now, $key, self::PLACES_STATUS_FAILED
+                    ) );
+                } else {
+                    $n = $wpdb->query( $wpdb->prepare(
+                        "UPDATE {$table} SET place_status = %s, error_count = 0,"
+                        . " last_error = NULL, updated_at = %s"
+                        . " WHERE place_status = %s",
+                        self::PLACES_STATUS_PENDING, $now, self::PLACES_STATUS_FAILED
+                    ) );
+                }
+                WP_CLI::success( sprintf( '%d key(s) returned to pending', (int) $n ) );
+                return;
+            }
+
+            $counts = $wpdb->get_results(
+                "SELECT place_status, COUNT(*) AS n FROM {$table} GROUP BY place_status",
+                ARRAY_A
+            );
+            if ( ! is_array( $counts ) || empty( $counts ) ) {
+                WP_CLI::log( 'queue empty' );
+                return;
+            }
+            foreach ( $counts as $r ) {
+                WP_CLI::log( sprintf( '%-8s %d', $r['place_status'], (int) $r['n'] ) );
+            }
         }
     }
 }
