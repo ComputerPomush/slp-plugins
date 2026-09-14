@@ -58,6 +58,31 @@ if (!class_exists('SLP_Avalon')){
         const PLACES_STATUS_OK      = 'ok';
         const PLACES_STATUS_FAILED  = 'failed';
 
+        /**
+         * v0.0.26 Part 3d. The resolver's own constants.
+         *
+         * PLACES_ENDPOINT is the LEGACY Text Search endpoint, not the
+         * New one. Places API (New) is disabled on project
+         * 1038304488249 and nobody on this side can enable it; legacy
+         * returns OK on the same key. Place IDs are one namespace
+         * across the two, so the 302 already resolved carry forward.
+         *
+         * PLACES_BIAS_RADIUS_M is BIAS_RADIUS_M out of
+         * build/resolve-placeids.py. It is not a tuning knob. Every one
+         * of the 302 IDs already paid for was resolved at 50000, and a
+         * different radius is a different question - s0.236, where
+         * adding the bias took a ranked list down to a single result.
+         *
+         * PLACES_LOG_OPTION is written with autoload 'no' and bounded at
+         * PLACES_LOG_MAX. s0.233 - the CLI persists its own record here
+         * rather than through avalon_flush_import_log(), which owns the
+         * CSV import cycle's override-log rotation slot.
+         */
+        const PLACES_ENDPOINT       = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
+        const PLACES_BIAS_RADIUS_M  = 50000;
+        const PLACES_LOG_OPTION     = 'avalon_places_log';
+        const PLACES_LOG_MAX        = 50;
+
         public static function instance(){
             if ( ! isset( self::$instance ) && ! ( self::$instance instanceof SLP_Avalon ) ) {
 
@@ -3150,6 +3175,521 @@ if (!class_exists('SLP_Avalon')){
         }
 
         /**
+         * v0.0.26 Part 3d. Build the Text Search query for one dealer.
+         *
+         * A PORT, NOT A DESIGN. build_query() in
+         * build/resolve-placeids.py produced every one of the 302 place
+         * IDs already paid for. A query built differently here would
+         * resolve a NEW dealer by different rules than its 302
+         * neighbours and the two would drift with nothing reporting it.
+         *
+         * THE FIELDS ARE HALF RAW AND HALF NORMALISED and the output
+         * string does not say which is which. Read out of the resolver
+         * on 2026-09-14 rather than inferred from the shape:
+         *
+         *   name     RAW         sl_store
+         *   address  RAW         sl_address, whole line, unit included
+         *   city     RAW         sl_city
+         *   unit     normalised  norm_street()[1], via vector()
+         *   state    normalised  norm_state(),     via vector()
+         *   zip      normalised  norm_postal()[0], via vector()
+         *   country  normalised  norm_country() -> USA / Canada
+         *
+         * 'Seattle WA 98119' looks uniform and is half raw. Normalising
+         * the city would send SEATTLE and ask Google a question no
+         * resolved dealer was ever asked.
+         *
+         * s0.222 - the unit is appended only when the raw address line
+         * does not already carry it, or it is spelled twice.
+         *
+         * @param array $row sl_store, sl_address, sl_city, sl_state,
+         *                   sl_zip, sl_country.
+         * @return string the query, or '' when there is nothing to ask.
+         */
+        private function avalon_places_query( $row ){
+            $get = function ( $k ) use ( $row ) {
+                return isset( $row[ $k ] ) ? (string) $row[ $k ] : '';
+            };
+
+            $v = SLP_Avalon_AddressKey::vector( array(
+                'raw_address' => $get( 'sl_address' ),
+                'raw_city'    => $get( 'sl_city' ),
+                'raw_state'   => $get( 'sl_state' ),
+                'raw_zip'     => $get( 'sl_zip' ),
+                'raw_country' => $get( 'sl_country' ),
+            ) );
+
+            $address = $get( 'sl_address' );
+            $bits    = array( $get( 'sl_store' ), $address );
+
+            $unit = (string) $v['unit'];
+            if ( '' !== $unit && false === strpos(
+                    strtoupper( SLP_Avalon_AddressKey::norm_text( $address ) ),
+                    strtoupper( $unit ) ) ) {
+                $bits[] = $unit;
+            }
+
+            $bits[] = SLP_Avalon_AddressKey::squash(
+                $get( 'sl_city' ) . ' ' . $v['state'] . ' ' . $v['zip'] );
+
+            if ( '' !== (string) $v['country'] ) {
+                $bits[] = ( 'CA' === $v['country'] ) ? 'Canada' : 'USA';
+            }
+
+            $keep = array();
+            foreach ( $bits as $b ) {
+                if ( '' !== SLP_Avalon_AddressKey::squash( $b ) ) {
+                    $keep[] = $b;
+                }
+            }
+            return SLP_Avalon_AddressKey::squash( implode( ', ', $keep ) );
+        }
+
+        /**
+         * v0.0.26 Part 3d. Keep the API key out of anything persisted.
+         *
+         * last_error is varchar(190) and is read by a human. The key
+         * travels in the query string, so any message assembled from a
+         * URL or a transport error can carry it. _scrub() in the
+         * resolver exists for the same reason.
+         */
+        private function avalon_places_scrub( $s, $key ){
+            $s = (string) $s;
+            if ( '' !== (string) $key ) {
+                $s = str_replace( (string) $key, 'REDACTED', $s );
+            }
+            return $s;
+        }
+
+        /**
+         * v0.0.26 Part 3d. Systemic failure or dealer data? s0.224.
+         *
+         * A DATA NEGATIVE IS A STRIKE; A TRANSPORT ERROR IS NOT, or one
+         * bad network afternoon fails half the queue permanently.
+         *
+         *   systemic  FATAL ...   a refusal aimed at the key or project
+         *             HTTP ...    a transport or status-code failure
+         *             ONEWORD     a bare exception or parse failure
+         *   data      no result             Google answered, answer no
+         *             NOT_ESTABLISHMENT ... an address, not a business
+         *             STATUS ...            a per-query refusal
+         *
+         * THE ONE-WORD RULE IS LOAD BEARING, not incidental. Every error
+         * this class raises with no space in it - BADJSON, NO_PLACE_ID -
+         * is systemic by construction, and every data verdict is spelled
+         * with a space so it cannot fall through to systemic by accident.
+         */
+        private function avalon_places_is_systemic( $err ){
+            $err = (string) $err;
+            if ( '' === $err ) {
+                return false;
+            }
+            if ( 0 === strpos( $err, 'FATAL' ) ) {
+                return true;
+            }
+            if ( 0 === strpos( $err, 'HTTP' ) ) {
+                return true;
+            }
+            return ( false === strpos( $err, ' ' ) );
+        }
+
+        /**
+         * v0.0.26 Part 3d. One legacy Text Search call.
+         *
+         * HTTP 200 AND AN ERROR IS THE LEGACY CONTRACT. The status line
+         * says nothing; the status FIELD is the outcome.
+         *
+         * http_build_query() was confirmed on 2026-09-14 to reproduce
+         * urllib.parse.urlencode() byte for byte on this parameter set -
+         * space to +, comma and # percent-encoded. Same bytes, same
+         * question, same answer as the run that paid for the 302.
+         *
+         * s0.223 - Text Search returns a STREET ADDRESS when it cannot
+         * find a business at one, shaped exactly like a hit: a place_id,
+         * a formatted_address, and a name which IS the address. Measured
+         * from this server on 2026-09-14 against Rockingham Marina
+         * Seattle - types street_address,subpremise. A loud miss beats a
+         * silent wrong id.
+         *
+         * DELIBERATELY NOT SCANNING results[1:] for the first
+         * establishment. That finds A business near the address, which
+         * is not the same as finding THE dealer, and it would fail
+         * silently in the other direction. With bias and region applied
+         * there is frequently no results[1:] at all - s0.236.
+         *
+         * ZERO_RESULTS and an empty OK list are a MISS, returned with no
+         * error. Google not knowing a dealer is an outcome. The caller
+         * turns a miss into the 'no result' strike; this method does not
+         * decide policy.
+         *
+         * @return array place_id and err; both empty means a clean miss.
+         */
+        private function avalon_places_text_search(
+                $query, $lat, $lng, $region, $key, $timeout ){
+            $out = array( 'place_id' => '', 'err' => '' );
+
+            if ( '' === (string) $key ) {
+                $out['err'] = 'FATAL NO_KEY';
+                return $out;
+            }
+
+            $params = array(
+                'query' => (string) $query,
+                'key'   => (string) $key,
+            );
+            if ( $this->avalon_coord_is_sane( $lat, $lng ) ) {
+                $params['location'] = $lat . ',' . $lng;
+                $params['radius']   = (string) self::PLACES_BIAS_RADIUS_M;
+            }
+            $region = strtoupper( (string) $region );
+            if ( 'US' === $region || 'CA' === $region ) {
+                $params['region'] = strtolower( $region );
+            }
+
+            $url  = self::PLACES_ENDPOINT . '?' . http_build_query( $params );
+            $resp = wp_remote_get( $url, array(
+                'timeout'     => (int) $timeout,
+                'redirection' => 2,
+                'sslverify'   => true,
+            ) );
+
+            if ( is_wp_error( $resp ) ) {
+                $out['err'] = $this->avalon_places_scrub(
+                    'HTTP ' . $resp->get_error_message(), $key );
+                return $out;
+            }
+
+            $code = (int) wp_remote_retrieve_response_code( $resp );
+            if ( 200 !== $code ) {
+                $out['err'] = 'HTTP ' . $code;
+                return $out;
+            }
+
+            $json = json_decode( wp_remote_retrieve_body( $resp ), true );
+            if ( ! is_array( $json ) ) {
+                $out['err'] = 'BADJSON';
+                return $out;
+            }
+
+            $status = strtoupper( (string) ( isset( $json['status'] )
+                                             ? $json['status'] : '' ) );
+
+            if ( 'OK' === $status ) {
+                $results = ( isset( $json['results'] )
+                             && is_array( $json['results'] ) )
+                           ? $json['results'] : array();
+                if ( empty( $results ) ) {
+                    return $out;
+                }
+                $top   = $results[0];
+                $types = ( isset( $top['types'] ) && is_array( $top['types'] ) )
+                         ? $top['types'] : array();
+                if ( ! in_array( 'establishment', $types, true ) ) {
+                    $out['err'] = $this->avalon_places_scrub(
+                        'NOT_ESTABLISHMENT ' . ( empty( $types )
+                            ? 'no types' : implode( ',', $types ) ), $key );
+                    return $out;
+                }
+                $pid = isset( $top['place_id'] ) ? (string) $top['place_id'] : '';
+                if ( '' === $pid ) {
+                    $out['err'] = 'NO_PLACE_ID';
+                    return $out;
+                }
+                $out['place_id'] = $pid;
+                return $out;
+            }
+
+            if ( 'ZERO_RESULTS' === $status ) {
+                return $out;
+            }
+
+            if ( 'REQUEST_DENIED' === $status || 'OVER_QUERY_LIMIT' === $status ) {
+                $out['err'] = 'FATAL ' . $status;
+                return $out;
+            }
+
+            $out['err'] = 'STATUS ' . ( '' === $status ? 'no status' : $status );
+            return $out;
+        }
+
+        /**
+         * v0.0.26 Part 3d. Persist a CLI record. s0.233.
+         *
+         * avalon_flush_import_log() ROTATES on the first flush of a
+         * request: avalon_geocode_overrides moves to _prev and the
+         * current option starts empty. A CLI subcommand runs in its own
+         * request, so calling it there rotates a log the CLI has nothing
+         * to do with - the last import's overrides are displaced by CLI
+         * noise and the generation before that is destroyed.
+         *
+         * This drains the same per-request buffer into its own bounded
+         * option instead. Autoload 'no', for the same reason
+         * avalon_geocode_cache is: it is read only when somebody asks.
+         *
+         * @return int records persisted.
+         */
+        private function avalon_places_log_flush(){
+            $buf = $this->avalon_state( 'log_buffer' );
+            if ( ! is_array( $buf ) || empty( $buf ) ) {
+                return 0;
+            }
+            $log = get_option( self::PLACES_LOG_OPTION );
+            if ( ! is_array( $log ) ) {
+                $log = array();
+            }
+            foreach ( $buf as $rec ) {
+                $log[] = $rec;
+            }
+            if ( count( $log ) > self::PLACES_LOG_MAX ) {
+                $log = array_slice( $log, - self::PLACES_LOG_MAX );
+            }
+            update_option( self::PLACES_LOG_OPTION, $log, 'no' );
+            $this->avalon_state_set( 'log_buffer', array() );
+            return count( $buf );
+        }
+
+        /**
+         * v0.0.26 Part 3d. Resolve pending keys against Text Search.
+         *
+         * THIS SPENDS. Every iteration is one billable call.
+         *
+         * NEVER-RE-RESOLVE IS IN THE STATEMENT, NOT IN A BRANCH. The
+         * success UPDATE carries AND place_status = pending AND place_id
+         * IS NULL in its WHERE, so a row that resolved between the queue
+         * read and the write is not overwritten. Same rule as
+         * avalon_places_import, stated the same way.
+         *
+         * THE STRIKE IS TWO STATEMENTS, NOT ONE. A single UPDATE doing
+         * error_count = error_count + 1 and then testing error_count in a
+         * CASE reads the NEW value, because MySQL evaluates assignments
+         * left to right. That makes the ceiling off by one and it is
+         * invisible in the SQL. Increment, then promote to failed in a
+         * separate statement whose WHERE states the ceiling plainly.
+         *
+         * A SYSTEMIC FAILURE DOES NOT TOUCH place_checked_at. The column
+         * means when Google was asked and answered about this dealer. A
+         * refused or unreachable call answered about the project, and
+         * stamping it would push a never-checked row to the back of KEY
+         * place_sweep for a reason that has nothing to do with the row.
+         *
+         * s0.220 - REQUEST_DENIED and OVER_QUERY_LIMIT are refusals aimed
+         * at the project. Every remaining call fails the same way. Break
+         * on the first one and spend nothing further.
+         *
+         * @param int  $limit 0 takes resolve_ceiling from the config.
+         * @param bool $dry   true builds queries and spends nothing.
+         * @return array counts, for the CLI and for the tests.
+         */
+        public function avalon_places_resolve( $limit = 0, $dry = false ){
+            global $wpdb, $slplus;
+
+            $cfg   = $this->avalon_hours_config();
+            $table = self::avalon_hours_table();
+            $loc   = $wpdb->prefix . 'store_locator';
+            $now   = current_time( 'mysql', true );
+
+            $out = array(
+                'considered' => 0,
+                'called'     => 0,
+                'resolved'   => 0,
+                'missed'     => 0,
+                'struck'     => 0,
+                'failed'     => 0,
+                'systemic'   => 0,
+                'no_row'     => 0,
+                'no_query'   => 0,
+                'raced'      => 0,
+                'fatal'      => '',
+                'dry'        => (bool) $dry,
+                'queries'    => array(),
+            );
+
+            $limit = (int) $limit;
+            if ( $limit <= 0 ) {
+                $limit = (int) $cfg['resolve_ceiling'];
+            }
+            if ( $limit <= 0 ) {
+                return $out;
+            }
+
+            $key = '';
+            if ( isset( $slplus->SmartOptions->google_server_key->value ) ) {
+                $key = (string) $slplus->SmartOptions->google_server_key->value;
+            }
+
+            //Driven off KEY place_sweep (place_status, place_checked_at).
+            //Never-checked rows first, then oldest-checked, so a row that
+            //has already had its turn cannot starve one that has not.
+            $queue = $wpdb->get_results( $wpdb->prepare(
+                "SELECT address_key, sl_id, error_count FROM {$table}"
+                . " WHERE place_status = %s AND place_id IS NULL"
+                . " ORDER BY place_checked_at IS NULL DESC,"
+                . " place_checked_at ASC, address_key ASC"
+                . " LIMIT %d",
+                self::PLACES_STATUS_PENDING,
+                $limit
+            ), ARRAY_A );
+
+            if ( ! is_array( $queue ) || empty( $queue ) ) {
+                return $out;
+            }
+
+            foreach ( $queue as $q ) {
+                $out['considered']++;
+                $akey  = (string) $q['address_key'];
+                $sl_id = (int) $q['sl_id'];
+
+                $row = $wpdb->get_row( $wpdb->prepare(
+                    "SELECT sl_store, sl_address, sl_city, sl_state, sl_zip,"
+                    . " sl_country, sl_latitude, sl_longitude"
+                    . " FROM {$loc} WHERE sl_id = %d LIMIT 1",
+                    $sl_id
+                ), ARRAY_A );
+
+                if ( ! is_array( $row ) || empty( $row ) ) {
+                    $out['no_row']++;
+                    continue;
+                }
+
+                $query = $this->avalon_places_query( $row );
+                if ( '' === $query ) {
+                    $out['no_query']++;
+                    continue;
+                }
+
+                //A DRY RUN SPENDS NOTHING AND WRITES NOTHING. Not the
+                //row, not the log. The queries are returned so the
+                //operator can read what would have been asked before
+                //any money is spent on asking it.
+                if ( $dry ) {
+                    $out['queries'][ $akey ] = $query;
+                    continue;
+                }
+
+                $res = $this->avalon_places_text_search(
+                    $query,
+                    isset( $row['sl_latitude'] ) ? $row['sl_latitude'] : '',
+                    isset( $row['sl_longitude'] ) ? $row['sl_longitude'] : '',
+                    SLP_Avalon_AddressKey::norm_country(
+                        isset( $row['sl_country'] ) ? $row['sl_country'] : '',
+                        SLP_Avalon_AddressKey::norm_state(
+                            isset( $row['sl_state'] ) ? $row['sl_state'] : '' ),
+                        '' ),
+                    $key,
+                    (int) $cfg['timeout']
+                );
+                $out['called']++;
+
+                $err = (string) $res['err'];
+
+                if ( 0 === strpos( $err, 'FATAL' ) ) {
+                    $out['fatal'] = $err;
+                    $out['systemic']++;
+                    $this->avalon_places_note( $akey, $err, $now );
+                    break;
+                }
+
+                if ( $this->avalon_places_is_systemic( $err ) ) {
+                    $out['systemic']++;
+                    $this->avalon_places_note( $akey, $err, $now );
+                    continue;
+                }
+
+                if ( '' === $err && '' !== (string) $res['place_id'] ) {
+                    $n = $wpdb->query( $wpdb->prepare(
+                        "UPDATE {$table} SET place_id = %s, place_status = %s,"
+                        . " place_checked_at = %s, error_count = 0,"
+                        . " last_error = NULL, updated_at = %s"
+                        . " WHERE address_key = %s AND place_status = %s"
+                        . " AND place_id IS NULL",
+                        (string) $res['place_id'],
+                        self::PLACES_STATUS_OK,
+                        $now,
+                        $now,
+                        $akey,
+                        self::PLACES_STATUS_PENDING
+                    ) );
+                    if ( is_numeric( $n ) && (int) $n > 0 ) {
+                        $out['resolved']++;
+                    } else {
+                        $out['raced']++;
+                    }
+                    continue;
+                }
+
+                //A DATA NEGATIVE. Google answered and the answer was no.
+                //A clean miss carries no err at all, so it is spelled
+                //here rather than left blank - a blank last_error would
+                //read as 'never tried'.
+                if ( '' === $err ) {
+                    $err = 'no result';
+                    $out['missed']++;
+                }
+                $out['struck']++;
+
+                $wpdb->query( $wpdb->prepare(
+                    "UPDATE {$table} SET error_count = error_count + 1,"
+                    . " last_error = %s, place_checked_at = %s, updated_at = %s"
+                    . " WHERE address_key = %s AND place_status = %s",
+                    substr( $err, 0, 190 ),
+                    $now,
+                    $now,
+                    $akey,
+                    self::PLACES_STATUS_PENDING
+                ) );
+
+                $f = $wpdb->query( $wpdb->prepare(
+                    "UPDATE {$table} SET place_status = %s, updated_at = %s"
+                    . " WHERE address_key = %s AND place_status = %s"
+                    . " AND error_count >= %d",
+                    self::PLACES_STATUS_FAILED,
+                    $now,
+                    $akey,
+                    self::PLACES_STATUS_PENDING,
+                    self::PLACES_ERROR_CEILING
+                ) );
+                if ( is_numeric( $f ) && (int) $f > 0 ) {
+                    $out['failed']++;
+                }
+            }
+
+            if ( ! $dry ) {
+                $this->avalon_import_log( array(
+                    'stage'      => 'places_resolve',
+                    'action'     => 'resolved',
+                    'considered' => $out['considered'],
+                    'called'     => $out['called'],
+                    'resolved'   => $out['resolved'],
+                    'struck'     => $out['struck'],
+                    'failed'     => $out['failed'],
+                    'systemic'   => $out['systemic'],
+                    'fatal'      => $out['fatal'],
+                ) );
+            }
+
+            return $out;
+        }
+
+        /**
+         * v0.0.26 Part 3d. Record a systemic failure without striking.
+         *
+         * error_count and place_checked_at are deliberately NOT touched.
+         * The call told us about the project, not about this dealer.
+         */
+        private function avalon_places_note( $akey, $err, $now ){
+            global $wpdb;
+            $table = self::avalon_hours_table();
+            $wpdb->query( $wpdb->prepare(
+                "UPDATE {$table} SET last_error = %s, updated_at = %s"
+                . " WHERE address_key = %s AND place_status = %s",
+                substr( (string) $err, 0, 190 ),
+                $now,
+                (string) $akey,
+                self::PLACES_STATUS_PENDING
+            ) );
+        }
+
+        /**
          * v0.0.26 Part 3. The cron callback.
          *
          * Part 3a runs the purge only. Resolution - the queue read, the
@@ -3161,6 +3701,17 @@ if (!class_exists('SLP_Avalon')){
          */
         public function avalon_places_cron(){
             $this->avalon_places_purge();
+
+            //THE RESOLVE BRANCH READS enabled; THE PURGE DELIBERATELY
+            //DOES NOT. Expiry is a licence obligation, resolution is a
+            //feature. Turning the feature off must not leave cached
+            //hours sitting past their TTL forever.
+            $cfg = $this->avalon_hours_config();
+            if ( empty( $cfg['enabled'] ) ) {
+                return;
+            }
+
+            $this->avalon_places_resolve( (int) $cfg['resolve_ceiling'], false );
         }
 
         /**
@@ -3427,9 +3978,24 @@ if (!class_exists('SLP_Avalon')){
          * skipping slp_avalon unregisters this command and leaves
          * SLP_Avalon_AddressKey unloaded.
          */
+        /**
+         * v0.0.26 Part 3d. The valid subcommands, named once.
+         *
+         * The dispatcher and the error message both reach for this. A
+         * list spelled twice is a list that eventually disagrees with
+         * itself, which is the same reason PLACES_CRON_HOOK is a const.
+         */
+        public static function avalon_places_subcommands(){
+            return array( 'seed', 'import', 'resolve', 'reset', 'status' );
+        }
+
         public function avalon_places_cli( $args, $assoc = array() ){
             global $wpdb;
 
+            //A BARE `wp avalon places` STILL MEANS status. That is the
+            //documented default and it is typed on purpose. s0.232 is
+            //about an unknown subcommand BECOMING status silently, not
+            //about the no-argument form.
             $sub   = isset( $args[0] ) ? (string) $args[0] : 'status';
             $table = self::avalon_hours_table();
 
@@ -3437,9 +4003,11 @@ if (!class_exists('SLP_Avalon')){
                 $out = $this->avalon_places_seed();
                 //avalon_import_log buffers into per-request state that
                 //slp_csv_processing_complete flushes at 500. Outside an
-                //import nothing flushes it, so the option copy is written
-                //here. s0.192 - one logging idiom, not a second for the CLI.
-                $this->avalon_flush_import_log( false );
+                //import nothing flushes it, so the record is written
+                //here. s0.233 - through the places log, NOT through
+                //avalon_flush_import_log(), which would rotate the CSV
+                //import cycle's override log on the CLI's behalf.
+                $this->avalon_places_log_flush();
                 WP_CLI::log( sprintf(
                     'rows %d  keys %d  inserted %d  updated %d  skipped %d  unmapped %d',
                     $out['rows'], $out['keys'], $out['inserted'],
@@ -3494,8 +4062,13 @@ if (!class_exists('SLP_Avalon')){
                     $out['imported'], $out['already_ok'],
                     $out['other_status'], $out['raced'], $out['undated']
                 ) );
+                //THESE THREE COUNT THE PLAN, WHICH A RE-RUN DOES NOT
+                //BUILD. On a second import they print 0 and read as a
+                //defect. Labelled, not renamed: the numbers are right
+                //about what they measure and were only ever wrong about
+                //what they appeared to measure.
                 WP_CLI::log( sprintf(
-                    'distinct ids %d  shared by >1 key %d  queued with no place id %d',
+                    'plan-scoped: distinct ids %d  shared by >1 key %d  queued with no place id %d',
                     $out['distinct'], $out['shared'], $out['no_place_id']
                 ) );
 
@@ -3514,6 +4087,53 @@ if (!class_exists('SLP_Avalon')){
                 WP_CLI::success( $dry
                     ? 'dry run, nothing written'
                     : 'import complete' );
+                return;
+            }
+
+            if ( 'resolve' === $sub ) {
+                $dry = ! empty( $assoc['dry-run'] );
+                $max = isset( $assoc['max-calls'] )
+                       ? (int) $assoc['max-calls'] : 0;
+
+                $out = $this->avalon_places_resolve( $max, $dry );
+
+                WP_CLI::log( sprintf(
+                    'considered %d  called %d  resolved %d  raced %d',
+                    $out['considered'], $out['called'],
+                    $out['resolved'], $out['raced']
+                ) );
+                WP_CLI::log( sprintf(
+                    'struck %d  of which no result %d  failed %d'
+                    . '  systemic %d',
+                    $out['struck'], $out['missed'],
+                    $out['failed'], $out['systemic']
+                ) );
+                WP_CLI::log( sprintf(
+                    'no locator row %d  no query %d',
+                    $out['no_row'], $out['no_query']
+                ) );
+
+                if ( $dry && ! empty( $out['queries'] ) ) {
+                    WP_CLI::log( '' );
+                    WP_CLI::log( 'queries that would be sent:' );
+                    foreach ( $out['queries'] as $k => $qq ) {
+                        WP_CLI::log( sprintf( '  %-12s %s', $k, $qq ) );
+                    }
+                }
+
+                $this->avalon_places_log_flush();
+
+                //s0.220. A refusal aimed at the project is not a
+                //property of any dealer, and it is not a successful
+                //run either. Read the exit code, not the output.
+                if ( '' !== $out['fatal'] ) {
+                    WP_CLI::error( 'aborted on ' . $out['fatal'] );
+                    return;
+                }
+
+                WP_CLI::success( $dry
+                    ? 'dry run, nothing spent and nothing written'
+                    : 'resolve complete' );
                 return;
             }
 
@@ -3536,6 +4156,21 @@ if (!class_exists('SLP_Avalon')){
                     ) );
                 }
                 WP_CLI::success( sprintf( '%d key(s) returned to pending', (int) $n ) );
+                return;
+            }
+
+            //s0.232. STATUS HAS TO BE ASKED FOR BY NAME. Until Part 3d
+            //this block was the fall-through, so any unknown subcommand
+            //- a typo, a subcommand from a build that is not deployed -
+            //printed a plausible status table and exited 0. That is how
+            //a missing deploy once looked like a successful dry run.
+            //A result shaped like success is not success.
+            if ( 'status' !== $sub ) {
+                WP_CLI::error( sprintf(
+                    'unknown subcommand "%s". Valid: %s',
+                    $sub,
+                    implode( ', ', self::avalon_places_subcommands() )
+                ) );
                 return;
             }
 
