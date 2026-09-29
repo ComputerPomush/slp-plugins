@@ -22,7 +22,11 @@ if (!class_exists('SLP_Avalon')){
          * written with an explicit 'no' because they are large and read
          * only during an import.
          */
-        const HOURS_DB_VERSION = '1';
+        //v2, v0.0.27 Part 1, adds business_status. Bumped while
+        //hours_json was still NULL in all 301 rows, so dbDelta's
+        //ALTER ran against an empty column and not across a table
+        //of cached Places content under the 30-day cap. s0.255.
+        const HOURS_DB_VERSION = '2';
         const HOURS_DB_OPTION  = 'avalon_hours_db_version';
 
         /**
@@ -82,6 +86,61 @@ if (!class_exists('SLP_Avalon')){
         const PLACES_BIAS_RADIUS_M  = 50000;
         const PLACES_LOG_OPTION     = 'avalon_places_log';
         const PLACES_LOG_MAX        = 50;
+
+        /**
+         * v0.0.27 Part 2. Place Details, both endpoints.
+         *
+         * Both are declared even though only one can be reached today.
+         * Places API (New) is not enabled on GCP project 1038304488249
+         * and enabling it needs IAM nobody on this side holds; the New
+         * endpoint answers 403 SERVICE_DISABLED. Legacy Place Details
+         * answers OK on the same key with real opening hours, measured
+         * on Aura DEV 2026-09-15 22:24:59 GMT against the control place
+         * ID ChIJTUJR1je6rYkR-Tl154_fum8.
+         *
+         * Declaring the unreachable one costs nothing and means
+         * enablement day is a constant flip rather than an edit to a
+         * pinned file.
+         *
+         * THE NEW ENDPOINT TAKES A TRAILING PLACE ID, not a query
+         * parameter. places/<PLACE_ID> is the resource name.
+         *
+         * primaryTypeDisplayName appears in the New mask only. It has
+         * no legacy equivalent, so primary_type_display stays NULL
+         * while the legacy path is in use.
+         */
+        /**
+         * v0.0.27 Part 3a. The hours state set.
+         *
+         * pending / ok / failed are spelled to match
+         * PLACES_STATUS_PENDING / _OK / _FAILED, because one class with
+         * two vocabularies for the same three ideas is how a future
+         * query ends up filtering on a status that never gets written.
+         *
+         * none and blocked are hours-only and are NOT failures:
+         *
+         *   none     the fetch worked and Google holds no hours for
+         *            this place. Common for dealerships that never set
+         *            them. Re-asked on the positive TTL, not the
+         *            negative one, because nothing went wrong.
+         *   blocked  the place ID is disputed and must never be asked.
+         *            Set by hand or by import, never by the sweep, and
+         *            the sweep never clears it.
+         *
+         * All three of none, blocked and failed render nothing. One
+         * front-end behaviour, three causes, told apart in SQL.
+         */
+        const HOURS_ERROR_CEILING   = 3;
+        const HOURS_STATUS_PENDING  = 'pending';
+        const HOURS_STATUS_OK       = 'ok';
+        const HOURS_STATUS_NONE     = 'none';
+        const HOURS_STATUS_BLOCKED  = 'blocked';
+        const HOURS_STATUS_FAILED   = 'failed';
+
+        const HOURS_ENDPOINT_LEGACY = 'https://maps.googleapis.com/maps/api/place/details/json';
+        const HOURS_ENDPOINT_NEW    = 'https://places.googleapis.com/v1/places/';
+        const HOURS_FIELDS_LEGACY   = 'place_id,name,business_status,opening_hours,utc_offset';
+        const HOURS_FIELDS_NEW      = 'id,name,displayName,businessStatus,regularOpeningHours,utcOffsetMinutes,primaryTypeDisplayName,attributions';
 
         public static function instance(){
             if ( ! isset( self::$instance ) && ! ( self::$instance instanceof SLP_Avalon ) ) {
@@ -2686,6 +2745,7 @@ if (!class_exists('SLP_Avalon')){
                 "  hours_json longtext null default null,",
                 "  hours_status varchar(16) not null default 'pending',",
                 "  fetched_at datetime null default null,",
+                "  business_status varchar(24) null default null,",
                 "  primary_type_display varchar(190) null default null,",
                 "  locality varchar(190) null default null,",
                 "  admin_area varchar(190) null default null,",
@@ -2778,7 +2838,538 @@ if (!class_exists('SLP_Avalon')){
                                        ? (int) AVALON_HOURS_DETAILS_CEILING : 50,
                 'timeout'           => defined('AVALON_HOURS_TIMEOUT')
                                        ? (int) AVALON_HOURS_TIMEOUT    : 8,
+
+                //v0.0.27 Part 2. Clamped to the two known values rather
+                //than passed through, and anything that is not exactly
+                //'new' resolves to 'legacy'. A typo in wp-config must
+                //land on the endpoint that works, not on the one that
+                //returns 403 for every dealer in the queue.
+                'api'               => ( defined('AVALON_HOURS_API')
+                                         && strtolower( (string) AVALON_HOURS_API ) === 'new' )
+                                       ? 'new' : 'legacy',
             );
+        }
+
+        /**
+         * v0.0.27 Part 2. One Place Details call, either endpoint.
+         *
+         * Returns, always, an array of this shape:
+         *
+         *   ok     bool    a Place was obtained
+         *   place  array   New-shaped Place object, or null
+         *   raw    array   verbatim decoded response, or null
+         *   api    string  which endpoint answered
+         *   error  string  '' when ok, else a reason, <= 190 chars
+         *
+         * The 190 is not arbitrary. last_error is varchar(190) and a
+         * caller that writes an untruncated reason gets a silent
+         * truncation from MySQL instead of a decision made here.
+         *
+         * NO DATABASE WRITE HAPPENS IN PART 2. This method fetches and
+         * returns. Deciding what that means for hours_status, and
+         * writing it, is Part 3.
+         */
+        public function avalon_hours_details( $place_id ){
+
+            $out = array(
+                'ok'    => false,
+                'place' => null,
+                'raw'   => null,
+                'api'   => 'legacy',
+                'error' => '',
+            );
+
+            $place_id = trim( (string) $place_id );
+            if ( $place_id === '' ) {
+                $out['error'] = 'EMPTY_PLACE_ID';
+                return $out;
+            }
+
+            $cfg          = $this->avalon_hours_config();
+            $out['api']   = $cfg['api'];
+
+            if ( empty( $cfg['enabled'] ) ) {
+                $out['error'] = 'DISABLED';
+                return $out;
+            }
+
+            global $slplus;
+            $api_key = '';
+            if ( isset( $slplus ) && is_object( $slplus ) ) {
+                $api_key = (string) $slplus->SmartOptions->google_server_key->value;
+            }
+            if ( $api_key === '' ) {
+                $out['error'] = 'NO_KEY';
+                return $out;
+            }
+
+            if ( $cfg['api'] === 'new' ) {
+                $res = $this->avalon_hours_details_new( $place_id, $api_key, (int) $cfg['timeout'] );
+            } else {
+                $res = $this->avalon_hours_details_legacy( $place_id, $api_key, (int) $cfg['timeout'] );
+            }
+
+            $res['api']   = $out['api'];
+            $res['error'] = substr( (string) $res['error'], 0, 190 );
+            return $res;
+        }
+
+        /**
+         * v0.0.27 Part 2. Legacy Place Details.
+         *
+         * HTTP 200 AND AN ERROR IS THE LEGACY CONTRACT, exactly as
+         * avalon_places_text_search() already records for Text Search.
+         * The transport succeeding says nothing; the status field in
+         * the body is the outcome. A caller that tests only the HTTP
+         * code treats REQUEST_DENIED as a success.
+         *
+         * The key travels in the URL because that is how legacy
+         * authenticates. It is never logged and never returned.
+         */
+        private function avalon_hours_details_legacy( $place_id, $api_key, $timeout ){
+
+            $out = array( 'ok' => false, 'place' => null, 'raw' => null,
+                          'api' => 'legacy', 'error' => '' );
+
+            $url = add_query_arg(
+                array(
+                    'place_id' => $place_id,
+                    'fields'   => self::HOURS_FIELDS_LEGACY,
+                    'key'      => $api_key,
+                ),
+                self::HOURS_ENDPOINT_LEGACY
+            );
+
+            $res = wp_remote_get( $url, array(
+                'timeout'    => $timeout > 0 ? $timeout : 8,
+                'sslverify'  => true,
+                'user-agent' => 'slp_avalon/' . self::HOURS_DB_VERSION,
+            ) );
+
+            if ( is_wp_error( $res ) ) {
+                //FATAL prefix so avalon_places_is_systemic() reads this as
+                //systemic. A transport failure is never a fact about the
+                //dealer and must not cost the row a strike. s0.256.
+                $out['error'] = 'FATAL TRANSPORT ' . $res->get_error_code();
+                return $out;
+            }
+
+            $code = (int) wp_remote_retrieve_response_code( $res );
+            $json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+
+            if ( ! is_array( $json ) ) {
+                //One word, no space: systemic by construction, which is
+                //what the shape rule expects a parse failure to be.
+                $out['error'] = 'BADJSON';
+                return $out;
+            }
+
+            $out['raw'] = $json;
+            $status     = isset( $json['status'] ) ? (string) $json['status'] : 'NO_STATUS';
+
+            if ( $status !== 'OK' || ! isset( $json['result'] ) || ! is_array( $json['result'] ) ) {
+                $msg = isset( $json['error_message'] ) ? ' ' . (string) $json['error_message'] : '';
+                $out['error'] = self::avalon_hours_verdict( $status ) . $msg;
+                return $out;
+            }
+
+            $attrib = ( isset( $json['html_attributions'] ) && is_array( $json['html_attributions'] ) )
+                      ? $json['html_attributions'] : array();
+
+            $out['place'] = $this->avalon_hours_normalise_legacy( $json['result'], $attrib );
+            $out['ok']    = true;
+            return $out;
+        }
+
+        /**
+         * v0.0.27 Part 2. Place Details (New).
+         *
+         * UNREACHABLE TODAY and written anyway. Three things differ and
+         * none of them is a URL swap:
+         *
+         *   the place ID is a path segment, not a query parameter
+         *   the key is a header, X-Goog-Api-Key
+         *   the field mask is REQUIRED - omit it and the call errors
+         *
+         * And the contract inverts: status and error_message moved onto
+         * the HTTP response, and the body IS the Place object with no
+         * result wrapper. So HTTP 200 here really does mean success.
+         */
+        private function avalon_hours_details_new( $place_id, $api_key, $timeout ){
+
+            $out = array( 'ok' => false, 'place' => null, 'raw' => null,
+                          'api' => 'new', 'error' => '' );
+
+            $res = wp_remote_get( self::HOURS_ENDPOINT_NEW . rawurlencode( $place_id ), array(
+                'timeout'    => $timeout > 0 ? $timeout : 8,
+                'sslverify'  => true,
+                'user-agent' => 'slp_avalon/' . self::HOURS_DB_VERSION,
+                'headers'    => array(
+                    'X-Goog-Api-Key'    => $api_key,
+                    'X-Goog-FieldMask'  => self::HOURS_FIELDS_NEW,
+                    'Content-Type'      => 'application/json',
+                ),
+            ) );
+
+            if ( is_wp_error( $res ) ) {
+                //FATAL prefix so avalon_places_is_systemic() reads this as
+                //systemic. A transport failure is never a fact about the
+                //dealer and must not cost the row a strike. s0.256.
+                $out['error'] = 'FATAL TRANSPORT ' . $res->get_error_code();
+                return $out;
+            }
+
+            $code = (int) wp_remote_retrieve_response_code( $res );
+            $json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+
+            if ( ! is_array( $json ) ) {
+                //One word, no space: systemic by construction, which is
+                //what the shape rule expects a parse failure to be.
+                $out['error'] = 'BADJSON';
+                return $out;
+            }
+
+            $out['raw'] = $json;
+
+            if ( $code !== 200 ) {
+                $st  = isset( $json['error']['status'] )  ? (string) $json['error']['status']  : 'HTTP ' . $code;
+                $msg = isset( $json['error']['message'] ) ? ' ' . (string) $json['error']['message'] : '';
+                //HTTP prefixes are already systemic under the shape rule;
+                //a named status still goes through the verdict map so the
+                //two callers cannot disagree about REQUEST_DENIED.
+                $out['error'] = ( 0 === strpos( $st, 'HTTP ' ) )
+                                ? $st . $msg
+                                : self::avalon_hours_verdict( $st ) . $msg;
+                return $out;
+            }
+
+            //Already the canonical shape. Nothing to normalise.
+            $out['place'] = $json;
+            $out['ok']    = true;
+            return $out;
+        }
+
+        /**
+         * v0.0.27 Part 2. Legacy Place -> New-shaped Place.
+         *
+         * Only the fields the two masks ask for are mapped. Anything
+         * else legacy happens to return stays in 'raw' and is not
+         * invented a New name here.
+         *
+         * utc_offset is read under both spellings. The measurement on
+         * 2026-09-15 came back under the DEPRECATED key, utc_offset,
+         * not utc_offset_minutes, so reading only the modern one would
+         * have produced a null offset on every dealer.
+         */
+        private function avalon_hours_normalise_legacy( $r, $attrib ){
+
+            $id = isset( $r['place_id'] ) ? (string) $r['place_id'] : '';
+
+            $place = array(
+                'id'           => $id,
+                'name'         => $id !== '' ? 'places/' . $id : '',
+                'displayName'  => array(
+                    'text'         => isset( $r['name'] ) ? (string) $r['name'] : '',
+                    'languageCode' => '',
+                ),
+                'attributions' => is_array( $attrib ) ? array_values( $attrib ) : array(),
+            );
+
+            if ( isset( $r['business_status'] ) ) {
+                $place['businessStatus'] = (string) $r['business_status'];
+            }
+
+            if ( isset( $r['utc_offset_minutes'] ) ) {
+                $place['utcOffsetMinutes'] = (int) $r['utc_offset_minutes'];
+            } elseif ( isset( $r['utc_offset'] ) ) {
+                $place['utcOffsetMinutes'] = (int) $r['utc_offset'];
+            }
+
+            if ( isset( $r['opening_hours'] ) && is_array( $r['opening_hours'] ) ) {
+
+                $oh  = $r['opening_hours'];
+                $reg = array();
+
+                if ( array_key_exists( 'open_now', $oh ) ) {
+                    //Carried across but NEVER to be rendered from cache.
+                    //It is computed at fetch time and the positive TTL
+                    //is 30 days. Open/closed is a render-time question,
+                    //answered from periods and utcOffsetMinutes.
+                    $reg['openNow'] = (bool) $oh['open_now'];
+                }
+
+                if ( isset( $oh['weekday_text'] ) && is_array( $oh['weekday_text'] ) ) {
+                    $reg['weekdayDescriptions'] = array_values( $oh['weekday_text'] );
+                }
+
+                if ( isset( $oh['periods'] ) && is_array( $oh['periods'] ) ) {
+                    $periods = array();
+                    foreach ( $oh['periods'] as $p ) {
+                        if ( ! is_array( $p ) ) {
+                            continue;
+                        }
+                        $one  = array();
+                        $open = $this->avalon_hours_point( isset( $p['open'] ) ? $p['open'] : null );
+                        if ( $open === null ) {
+                            //No open point is not a period. Legacy emits
+                            //no period at all for a closed day, which is
+                            //why a seven-line weekday_text can arrive
+                            //beside five periods.
+                            continue;
+                        }
+                        $one['open'] = $open;
+                        //A 24-hour place has an open point and NO close
+                        //point. Emitting a null close would be a lie;
+                        //omitting the key is what New does too.
+                        $close = $this->avalon_hours_point( isset( $p['close'] ) ? $p['close'] : null );
+                        if ( $close !== null ) {
+                            $one['close'] = $close;
+                        }
+                        $periods[] = $one;
+                    }
+                    $reg['periods'] = $periods;
+                }
+
+                $place['regularOpeningHours'] = $reg;
+            }
+
+            return $place;
+        }
+
+        /**
+         * v0.0.27 Part 2. Legacy "0800" -> array( day, hour, minute ).
+         *
+         * Left-padded before splitting because legacy writes midnight as
+         * "0000" but has been seen to write it as "000" when a period
+         * is synthesised. substr on a three-character string would read
+         * hour 00 and minute 0, which is right by luck at midnight and
+         * wrong everywhere else.
+         */
+        private function avalon_hours_point( $p ){
+
+            if ( ! is_array( $p ) || ! isset( $p['time'] ) ) {
+                return null;
+            }
+
+            $t = preg_replace( '/\D/', '', (string) $p['time'] );
+            if ( $t === '' ) {
+                return null;
+            }
+            $t = str_pad( $t, 4, '0', STR_PAD_LEFT );
+
+            return array(
+                'day'    => isset( $p['day'] ) ? (int) $p['day'] : 0,
+                'hour'   => (int) substr( $t, 0, 2 ),
+                'minute' => (int) substr( $t, 2, 2 ),
+            );
+        }
+
+        /**
+         * v0.0.27 Part 3a. Status name -> verdict prefix. s0.256.
+         *
+         * avalon_places_is_systemic() reads the SHAPE of the string.
+         * This decides the shape from the NAME, so the two agree by
+         * construction instead of by luck. Classifying a status only
+         * by whether its message happens to contain a space is how
+         * REQUEST_DENIED came to be read as a fact about a dealer.
+         *
+         * DEFAULT IS SYSTEMIC. An unrecognised status is a status this
+         * code has never seen, and striking 301 dealers over one is
+         * worse than stopping and being told about it.
+         */
+        private static function avalon_hours_verdict( $status ){
+
+            $status = (string) $status;
+
+            //Google answered, and the answer was no. A fact about this
+            //place, so this row takes the strike.
+            $data = array( 'ZERO_RESULTS', 'NOT_FOUND' );
+            if ( in_array( $status, $data, true ) ) {
+                return 'STATUS ' . $status;
+            }
+
+            return 'FATAL ' . $status;
+        }
+
+        /**
+         * v0.0.27 Part 3a. One pass of the hours queue.
+         *
+         * Returns counts; writes rows. Nothing schedules it yet - the
+         * cron hook and the CLI are Part 3b, so this runs only when a
+         * person calls it.
+         *
+         * THE QUEUE, in one statement rather than a status scan:
+         *
+         *   place_status must be ok and place_id must be present. A row
+         *   with no resolved place cannot be asked about, and asking
+         *   would spend a call to be told so.
+         *
+         *   blocked is excluded outright.
+         *
+         *   pending is always due.
+         *   ok and none are due on the POSITIVE ttl - 30 days, the cap.
+         *   failed is due on the NEGATIVE ttl - 7 days.
+         *
+         * hours_sweep (hours_status, fetched_at) is the index this was
+         * written against, which is why the filter leads on status and
+         * the order leads on fetched_at.
+         *
+         * NULLS FIRST, then oldest, then address_key. Identical to the
+         * places queue so the two cannot drift into different notions
+         * of fair.
+         */
+        public function avalon_hours_sweep( $limit = 0, $dry = false ){
+
+            global $wpdb;
+
+            $out = array(
+                'scanned'  => 0,
+                'ok'       => 0,
+                'none'     => 0,
+                'struck'   => 0,
+                'failed'   => 0,
+                'systemic' => 0,
+                'dry'      => (bool) $dry,
+                'errors'   => array(),
+            );
+
+            $cfg = $this->avalon_hours_config();
+            if ( empty( $cfg['enabled'] ) ) {
+                $out['errors'][] = 'DISABLED';
+                return $out;
+            }
+
+            $limit = ( (int) $limit > 0 ) ? (int) $limit : (int) $cfg['details_ceiling'];
+            $table = self::avalon_hours_table();
+
+            //Computed ONCE, before the loop. Every row written in this
+            //run carries the same stamp, so queue order can never be
+            //inferred from the timestamps afterwards.
+            $now = current_time( 'mysql', true );
+
+            $pos_cut = gmdate( 'Y-m-d H:i:s',
+                               time() - ( (int) $cfg['positive_ttl_days'] * DAY_IN_SECONDS ) );
+            $neg_cut = gmdate( 'Y-m-d H:i:s',
+                               time() - ( (int) $cfg['negative_ttl_days'] * DAY_IN_SECONDS ) );
+
+            $rows = $wpdb->get_results( $wpdb->prepare(
+                "SELECT address_key, place_id, hours_status, error_count"
+                . " FROM {$table}"
+                . " WHERE place_status = %s"
+                . "   AND place_id IS NOT NULL AND place_id <> ''"
+                . "   AND hours_status <> %s"
+                . "   AND ("
+                . "        hours_status = %s"
+                . "     OR ( hours_status IN (%s, %s) AND ( fetched_at IS NULL OR fetched_at < %s ) )"
+                . "     OR ( hours_status = %s        AND ( fetched_at IS NULL OR fetched_at < %s ) )"
+                . "   )"
+                . " ORDER BY fetched_at IS NULL DESC, fetched_at ASC, address_key ASC"
+                . " LIMIT %d",
+                self::PLACES_STATUS_OK,
+                self::HOURS_STATUS_BLOCKED,
+                self::HOURS_STATUS_PENDING,
+                self::HOURS_STATUS_OK,
+                self::HOURS_STATUS_NONE,
+                $pos_cut,
+                self::HOURS_STATUS_FAILED,
+                $neg_cut,
+                $limit
+            ), ARRAY_A );
+
+            if ( ! is_array( $rows ) ) {
+                $out['errors'][] = 'BADQUERY';
+                return $out;
+            }
+
+            foreach ( $rows as $row ) {
+
+                $out['scanned']++;
+
+                if ( $dry ) {
+                    //A dry run spends nothing and writes nothing. It
+                    //answers which rows are due, which is the only
+                    //question worth asking without paying.
+                    continue;
+                }
+
+                $res = $this->avalon_hours_details( $row['place_id'] );
+
+                if ( empty( $res['ok'] ) ) {
+
+                    $err = (string) $res['error'];
+
+                    if ( $this->avalon_places_is_systemic( $err ) ) {
+                        //error_count and fetched_at are deliberately NOT
+                        //touched. The row did nothing wrong and must not
+                        //lose its place in the queue. And we stop: every
+                        //remaining row would buy the same refusal.
+                        $out['systemic']++;
+                        $out['errors'][] = $err;
+                        break;
+                    }
+
+                    $next  = (int) $row['error_count'] + 1;
+                    $state = ( $next >= self::HOURS_ERROR_CEILING )
+                             ? self::HOURS_STATUS_FAILED
+                             : self::HOURS_STATUS_PENDING;
+
+                    $wpdb->query( $wpdb->prepare(
+                        "UPDATE {$table} SET error_count = error_count + 1,"
+                        . " last_error = %s, hours_status = %s,"
+                        . " fetched_at = %s, updated_at = %s"
+                        . " WHERE address_key = %s",
+                        substr( $err, 0, 190 ), $state, $now, $now, $row['address_key']
+                    ) );
+
+                    $out['struck']++;
+                    if ( $state === self::HOURS_STATUS_FAILED ) {
+                        $out['failed']++;
+                    }
+                    continue;
+                }
+
+                $place = is_array( $res['place'] ) ? $res['place'] : array();
+
+                //An empty regularOpeningHours is not the same as a missing
+                //one, but both mean the same thing to a reader: Google has
+                //no hours here. Neither is an error.
+                $has = ( isset( $place['regularOpeningHours'] )
+                         && is_array( $place['regularOpeningHours'] )
+                         && ! empty( $place['regularOpeningHours'] ) );
+
+                $state = $has ? self::HOURS_STATUS_OK : self::HOURS_STATUS_NONE;
+
+                //raw is stored beside place on purpose. If an inner New
+                //field name turns out wrong, re-normalising stored bytes
+                //is free and re-fetching 301 dealers is not.
+                $payload = wp_json_encode( array(
+                    'shape'  => 'new',
+                    'source' => $res['api'],
+                    'at'     => $now,
+                    'place'  => $place,
+                    'raw'    => $res['raw'],
+                ) );
+
+                $bstat = isset( $place['businessStatus'] )
+                         ? substr( (string) $place['businessStatus'], 0, 24 )
+                         : null;
+
+                $wpdb->query( $wpdb->prepare(
+                    "UPDATE {$table} SET hours_json = %s, hours_status = %s,"
+                    . " business_status = %s, fetched_at = %s, updated_at = %s,"
+                    . " error_count = 0, last_error = NULL"
+                    . " WHERE address_key = %s",
+                    $payload, $state, $bstat, $now, $now, $row['address_key']
+                ) );
+
+                if ( $has ) {
+                    $out['ok']++;
+                } else {
+                    $out['none']++;
+                }
+            }
+
+            return $out;
         }
 
         public function avalon_rest_protected_slugs(){
