@@ -137,6 +137,23 @@ if (!class_exists('SLP_Avalon')){
         const HOURS_STATUS_BLOCKED  = 'blocked';
         const HOURS_STATUS_FAILED   = 'failed';
 
+        /**
+         * v0.0.27 Part 3b. The hours cron.
+         *
+         * HOURS_CRON_HOOK is named once, for the reason PLACES_CRON_HOOK
+         * is: the gate, the registration and the status line all reach
+         * for it. It is named for what the callback does - refresh - and
+         * NOT after avalon_hours_sweep(), so a search for one does not
+         * land on the other.
+         *
+         * HOURS_REFRESH_MARGIN_DAYS. The sweep re-asks ok and none rows
+         * this many days BEFORE the positive TTL, so a row is refreshed
+         * before the purge's hard cap clears it and a store page does not
+         * lose its hours for a day every month. s0.262.
+         */
+        const HOURS_CRON_HOOK           = 'avalon_hours_refresh';
+        const HOURS_REFRESH_MARGIN_DAYS = 2;
+
         const HOURS_ENDPOINT_LEGACY = 'https://maps.googleapis.com/maps/api/place/details/json';
         const HOURS_ENDPOINT_NEW    = 'https://places.googleapis.com/v1/places/';
         const HOURS_FIELDS_LEGACY   = 'place_id,name,business_status,opening_hours,utc_offset';
@@ -316,11 +333,18 @@ if (!class_exists('SLP_Avalon')){
             // reports nothing.
             add_action(self::PLACES_CRON_HOOK, array(self::$instance,'avalon_places_cron'));
             //
+            // v0.0.27 Part 3b. The hours sweep: its own schedule gate on
+            // init priority 1 and its own hook, registered unconditionally,
+            // for the reasons given for the places pair above.
+            add_action('init', array(self::$instance,'avalon_hours_maybe_schedule'), 1);
+            add_action(self::HOURS_CRON_HOOK, array(self::$instance,'avalon_hours_cron'));
+            //
             // WP-CLI, inline and guarded - deliberately NOT a new file.
             // A require_once of a file that has not landed yet is fatal,
             // and Part 2 already paid that deploy-ordering tax once.
             if ( defined('WP_CLI') && WP_CLI ) {
                 WP_CLI::add_command( 'avalon places', array(self::$instance,'avalon_places_cli') );
+                WP_CLI::add_command( 'avalon hours', array(self::$instance,'avalon_hours_cli') );
             }
         }
 
@@ -3194,9 +3218,8 @@ if (!class_exists('SLP_Avalon')){
         /**
          * v0.0.27 Part 3a. One pass of the hours queue.
          *
-         * Returns counts; writes rows. Nothing schedules it yet - the
-         * cron hook and the CLI are Part 3b, so this runs only when a
-         * person calls it.
+         * Returns counts; writes rows. Part 3b's cron and CLI call it; so
+         * can a person, from wp eval.
          *
          * THE QUEUE, in one statement rather than a status scan:
          *
@@ -3204,10 +3227,14 @@ if (!class_exists('SLP_Avalon')){
          *   with no resolved place cannot be asked about, and asking
          *   would spend a call to be told so.
          *
-         *   blocked is excluded outright.
+         *   blocked is excluded outright, and so is every key in
+         *   avalon_hours_disputed_keys(), whether or not it has been
+         *   marked blocked yet. No caller can ask about a disputed place.
          *
          *   pending is always due.
-         *   ok and none are due on the POSITIVE ttl - 30 days, the cap.
+         *   ok and none are due HOURS_REFRESH_MARGIN_DAYS before the
+         *   POSITIVE ttl, so they are refreshed before the purge's hard
+         *   30-day cap clears them. s0.262.
          *   failed is due on the NEGATIVE ttl - 7 days.
          *
          * hours_sweep (hours_status, fetched_at) is the index this was
@@ -3217,6 +3244,26 @@ if (!class_exists('SLP_Avalon')){
          * NULLS FIRST, then oldest, then address_key. Identical to the
          * places queue so the two cannot drift into different notions
          * of fair.
+         *
+         * v0.0.27 Part 3b. NEVER-OVERWRITE IS IN THE STATEMENT. Both
+         * writes carry AND place_id = <the id that was asked about> AND
+         * hours_status <> blocked. A row blocked by hand, or re-pointed
+         * by Part 3e, between the queue read and the write is refused by
+         * the WHERE and counted as raced - never retried, which would be
+         * the branch arguing with the statement that refused it. s0.258.
+         *
+         * ok MEANS THERE ARE WEEKDAY LINES TO SHOW. The renderer prints
+         * weekdayDescriptions verbatim and nothing else, so a Place whose
+         * hours carry only openNow is none. s0.260.
+         *
+         * A STRIKE CLEARS THE CACHED PLACE. The struck row is no longer ok
+         * or none, so nothing renders from it, and the strike re-stamps
+         * fetched_at - content left behind would outlive the 30-day cap
+         * with nothing counting its age. s0.263.
+         *
+         * A FAILED READ IS NOT AN EMPTY QUEUE. wpdb::get_results() returns
+         * an empty array, not null, when the database refuses the
+         * statement; only last_error tells the two apart. s0.264.
          */
         public function avalon_hours_sweep( $limit = 0, $dry = false ){
 
@@ -3229,7 +3276,9 @@ if (!class_exists('SLP_Avalon')){
                 'struck'   => 0,
                 'failed'   => 0,
                 'systemic' => 0,
+                'raced'    => 0,
                 'dry'      => (bool) $dry,
+                'due'      => array(),
                 'errors'   => array(),
             );
 
@@ -3247,10 +3296,31 @@ if (!class_exists('SLP_Avalon')){
             //inferred from the timestamps afterwards.
             $now = current_time( 'mysql', true );
 
-            $pos_cut = gmdate( 'Y-m-d H:i:s',
-                               time() - ( (int) $cfg['positive_ttl_days'] * DAY_IN_SECONDS ) );
+            $refresh = max( 1, (int) $cfg['positive_ttl_days'] - self::HOURS_REFRESH_MARGIN_DAYS );
+            $pos_cut = gmdate( 'Y-m-d H:i:s', time() - ( $refresh * DAY_IN_SECONDS ) );
             $neg_cut = gmdate( 'Y-m-d H:i:s',
                                time() - ( (int) $cfg['negative_ttl_days'] * DAY_IN_SECONDS ) );
+
+            $disputed = array_keys( self::avalon_hours_disputed_keys() );
+            $not_in   = '';
+            if ( ! empty( $disputed ) ) {
+                $not_in = '   AND address_key NOT IN ('
+                        . implode( ', ', array_fill( 0, count( $disputed ), '%s' ) ) . ')';
+            }
+
+            $args = array_merge(
+                array( self::PLACES_STATUS_OK, self::HOURS_STATUS_BLOCKED ),
+                $disputed,
+                array(
+                    self::HOURS_STATUS_PENDING,
+                    self::HOURS_STATUS_OK,
+                    self::HOURS_STATUS_NONE,
+                    $pos_cut,
+                    self::HOURS_STATUS_FAILED,
+                    $neg_cut,
+                    $limit,
+                )
+            );
 
             $rows = $wpdb->get_results( $wpdb->prepare(
                 "SELECT address_key, place_id, hours_status, error_count"
@@ -3258,6 +3328,7 @@ if (!class_exists('SLP_Avalon')){
                 . " WHERE place_status = %s"
                 . "   AND place_id IS NOT NULL AND place_id <> ''"
                 . "   AND hours_status <> %s"
+                . $not_in
                 . "   AND ("
                 . "        hours_status = %s"
                 . "     OR ( hours_status IN (%s, %s) AND ( fetched_at IS NULL OR fetched_at < %s ) )"
@@ -3265,18 +3336,13 @@ if (!class_exists('SLP_Avalon')){
                 . "   )"
                 . " ORDER BY fetched_at IS NULL DESC, fetched_at ASC, address_key ASC"
                 . " LIMIT %d",
-                self::PLACES_STATUS_OK,
-                self::HOURS_STATUS_BLOCKED,
-                self::HOURS_STATUS_PENDING,
-                self::HOURS_STATUS_OK,
-                self::HOURS_STATUS_NONE,
-                $pos_cut,
-                self::HOURS_STATUS_FAILED,
-                $neg_cut,
-                $limit
+                $args
             ), ARRAY_A );
 
-            if ( ! is_array( $rows ) ) {
+            //s0.264. A missing table or a lost connection comes back as an
+            //empty array. Reported as nothing due, the cron would log a
+            //clean run every day and never sweep again.
+            if ( ! is_array( $rows ) || '' !== (string) $wpdb->last_error ) {
                 $out['errors'][] = 'BADQUERY';
                 return $out;
             }
@@ -3289,6 +3355,7 @@ if (!class_exists('SLP_Avalon')){
                     //A dry run spends nothing and writes nothing. It
                     //answers which rows are due, which is the only
                     //question worth asking without paying.
+                    $out['due'][] = (string) $row['address_key'];
                     continue;
                 }
 
@@ -3313,13 +3380,32 @@ if (!class_exists('SLP_Avalon')){
                              ? self::HOURS_STATUS_FAILED
                              : self::HOURS_STATUS_PENDING;
 
-                    $wpdb->query( $wpdb->prepare(
+                    //s0.263. The cached Place goes with the strike.
+                    $n = $wpdb->query( $wpdb->prepare(
                         "UPDATE {$table} SET error_count = error_count + 1,"
                         . " last_error = %s, hours_status = %s,"
+                        . " hours_json = NULL, attribution_json = NULL,"
+                        . " business_status = NULL, primary_type_display = NULL,"
+                        . " locality = NULL, admin_area = NULL,"
                         . " fetched_at = %s, updated_at = %s"
-                        . " WHERE address_key = %s",
-                        substr( $err, 0, 190 ), $state, $now, $now, $row['address_key']
+                        . " WHERE address_key = %s AND place_id = %s"
+                        . " AND hours_status <> %s",
+                        substr( $err, 0, 190 ), $state, $now, $now,
+                        $row['address_key'], $row['place_id'], self::HOURS_STATUS_BLOCKED
                     ) );
+
+                    if ( false === $n ) {
+                        //The database refused a write. Not a fact about the
+                        //dealer, and every later row would buy a call that
+                        //cannot be recorded.
+                        $out['systemic']++;
+                        $out['errors'][] = 'BADWRITE';
+                        break;
+                    }
+                    if ( (int) $n < 1 ) {
+                        $out['raced']++;
+                        continue;
+                    }
 
                     $out['struck']++;
                     if ( $state === self::HOURS_STATUS_FAILED ) {
@@ -3330,12 +3416,12 @@ if (!class_exists('SLP_Avalon')){
 
                 $place = is_array( $res['place'] ) ? $res['place'] : array();
 
-                //An empty regularOpeningHours is not the same as a missing
-                //one, but both mean the same thing to a reader: Google has
-                //no hours here. Neither is an error.
+                //s0.260. Weekday lines, or nothing to show.
                 $has = ( isset( $place['regularOpeningHours'] )
                          && is_array( $place['regularOpeningHours'] )
-                         && ! empty( $place['regularOpeningHours'] ) );
+                         && isset( $place['regularOpeningHours']['weekdayDescriptions'] )
+                         && is_array( $place['regularOpeningHours']['weekdayDescriptions'] )
+                         && ! empty( $place['regularOpeningHours']['weekdayDescriptions'] ) );
 
                 $state = $has ? self::HOURS_STATUS_OK : self::HOURS_STATUS_NONE;
 
@@ -3352,15 +3438,29 @@ if (!class_exists('SLP_Avalon')){
 
                 $bstat = isset( $place['businessStatus'] )
                          ? substr( (string) $place['businessStatus'], 0, 24 )
-                         : null;
+                         : '';
 
-                $wpdb->query( $wpdb->prepare(
+                //s0.259. NULLIF, because wpdb::prepare() has no NULL: a
+                //null bound through %s is escaped as '' and stored as ''.
+                $n = $wpdb->query( $wpdb->prepare(
                     "UPDATE {$table} SET hours_json = %s, hours_status = %s,"
-                    . " business_status = %s, fetched_at = %s, updated_at = %s,"
+                    . " business_status = NULLIF(%s, ''), fetched_at = %s, updated_at = %s,"
                     . " error_count = 0, last_error = NULL"
-                    . " WHERE address_key = %s",
-                    $payload, $state, $bstat, $now, $now, $row['address_key']
+                    . " WHERE address_key = %s AND place_id = %s"
+                    . " AND hours_status <> %s",
+                    $payload, $state, $bstat, $now, $now,
+                    $row['address_key'], $row['place_id'], self::HOURS_STATUS_BLOCKED
                 ) );
+
+                if ( false === $n ) {
+                    $out['systemic']++;
+                    $out['errors'][] = 'BADWRITE';
+                    break;
+                }
+                if ( (int) $n < 1 ) {
+                    $out['raced']++;
+                    continue;
+                }
 
                 if ( $has ) {
                     $out['ok']++;
@@ -3370,6 +3470,388 @@ if (!class_exists('SLP_Avalon')){
             }
 
             return $out;
+        }
+
+        /**
+         * v0.0.27 Part 3b. Place ids the hours sweep must never ask about.
+         *
+         * Adjudicated 2026-09-14 by build/score-placeid-matches.py r2 from
+         * match-scores.csv, with no calls. A wrong place id publishes
+         * ANOTHER dealer's opening hours on a real dealer's store page,
+         * which is worse than showing nothing - a customer drives there
+         * on a Sunday. s0.254 proved clearing a row cannot fix a
+         * mis-resolve, so until Part 3e ships a correction path these
+         * keys are blocked.
+         *
+         * THIS LIST IS CODE, NOT AN OPTION, on the precedent of
+         * avalon_orphan_redirect_map(): it is nine rows, it is reviewable
+         * in a diff, it travels to every environment with the plugin, and
+         * a key comes off it in the release that corrects its place id.
+         * placeids.json is one file for all three brand feeds, so a key
+         * disputed on Aura is disputed wherever it appears.
+         *
+         * The two weaker-side rows are blocked because nobody has looked
+         * at them yet, decided 2026-09-29. The third weaker-side row,
+         * 0021b0d78410, was fetched that day and is the right place.
+         *
+         * Public so the suite reads the list rather than restating it.
+         *
+         * @return array address_key => why
+         */
+        public static function avalon_hours_disputed_keys(){
+            return array(
+                'b391a6d50f59' => 'MIS-RESOLVE: the place is 25.8 km away; it is 8f827b55e6c6',
+                'e0487241edc4' => 'MIS-RESOLVE: the place is 63.2 km away; it is ea5de0bcdfe3',
+                '88cd11dcda38' => 'BOTH WRONG: shared with aae51e47328a; the phone vetoes both',
+                'aae51e47328a' => 'BOTH WRONG: shared with 88cd11dcda38; the phone vetoes both',
+                'bd1658e3580d' => 'TWO LOCATIONS: the place is 14.2 km away; it is 6ff0d20c0500',
+                '369e2ae4210a' => 'LOCATION MISMATCH: the place is 5.9 km away; it is 8e63db05c22b',
+                'c0ebc2093268' => 'LOCATION MISMATCH: the place is 5.7 km away; it is 1b49e035fcd9',
+                '3664a8c7ba9e' => 'WEAKER SIDE, unchecked: 604 m off; 343e3d465648 scores 105 to 65',
+                '670217f109e9' => 'WEAKER SIDE, unchecked: 82e66db527bd scores 80 to 60',
+            );
+        }
+
+        /**
+         * v0.0.27 Part 3b. Mark every disputed key blocked, and clear
+         * anything already cached for it.
+         *
+         * Clearing is the point, not a tidy-up. A disputed row fetched
+         * before its key was listed holds another dealer's hours, and the
+         * renderer must find nothing. The queue already refuses to ASK
+         * about a listed key; this makes sure nothing already ASKED is
+         * shown.
+         *
+         * One-way. It never releases a block: a key taken off the list
+         * stays blocked until `wp avalon hours release` says otherwise, so
+         * a block set by hand in an emergency is not silently undone by
+         * the next cron run.
+         *
+         * @return int rows changed.
+         */
+        private function avalon_hours_sync_blocks( $now ){
+            global $wpdb;
+
+            $keys = array_keys( self::avalon_hours_disputed_keys() );
+            if ( empty( $keys ) ) {
+                return 0;
+            }
+            $table = self::avalon_hours_table();
+
+            $n = $wpdb->query( $wpdb->prepare(
+                "UPDATE {$table} SET hours_status = %s, hours_json = NULL,"
+                . " business_status = NULL, attribution_json = NULL,"
+                . " fetched_at = NULL, error_count = 0, last_error = %s,"
+                . " updated_at = %s"
+                . " WHERE address_key IN ("
+                . implode( ', ', array_fill( 0, count( $keys ), '%s' ) ) . ")"
+                . " AND ( hours_status <> %s OR hours_json IS NOT NULL )",
+                array_merge(
+                    array( self::HOURS_STATUS_BLOCKED, 'DISPUTED place id', $now ),
+                    $keys,
+                    array( self::HOURS_STATUS_BLOCKED )
+                )
+            ) );
+            return is_numeric( $n ) ? (int) $n : 0;
+        }
+
+        /**
+         * v0.0.27 Part 3b. Return one blocked key to the queue.
+         *
+         * Refused while the key is still listed: the list is the
+         * authority, and a release the next run would undo is not a
+         * release. Part 3e calls this for a key whose place id it has
+         * corrected, in the release that takes the key off the list.
+         *
+         * @return int|string rows released, or the reason nothing was.
+         */
+        public function avalon_hours_release( $key ){
+            global $wpdb;
+
+            $key = strtolower( trim( (string) $key ) );
+            if ( ! preg_match( '/^[0-9a-f]{12}$/', $key ) ) {
+                return 'not an address key: ' . $key;
+            }
+            if ( array_key_exists( $key, self::avalon_hours_disputed_keys() ) ) {
+                return 'still listed in avalon_hours_disputed_keys(): ' . $key;
+            }
+            $table = self::avalon_hours_table();
+
+            $n = $wpdb->query( $wpdb->prepare(
+                "UPDATE {$table} SET hours_status = %s, error_count = 0,"
+                . " last_error = NULL, updated_at = %s"
+                . " WHERE address_key = %s AND hours_status = %s",
+                self::HOURS_STATUS_PENDING,
+                current_time( 'mysql', true ),
+                $key,
+                self::HOURS_STATUS_BLOCKED
+            ) );
+            if ( false === $n ) {
+                //s0.265. A refused write is not "no blocked row".
+                return 'the database refused the release: ' . (string) $wpdb->last_error;
+            }
+            return (int) $n;
+        }
+
+        /**
+         * v0.0.27 Part 3b. The hours schedule gate.
+         *
+         * The places gate's twin, for its reasons: init priority 1 because
+         * activation never fires on a database-import site; the first run
+         * an hour out so a deploy cannot sweep inside the request that
+         * installed it; no unschedule branch, because a gate that also
+         * removes fights an administrator who cleared the event on
+         * purpose.
+         *
+         * It runs on every environment that runs the plugin - DEV and
+         * LIVE both, decided 2026-09-29. A DEV-to-LIVE push copies DEV's
+         * table over LIVE's, so each has to keep itself fresh.
+         */
+        public function avalon_hours_maybe_schedule(){
+            if ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) {
+                return;
+            }
+            if ( wp_next_scheduled( self::HOURS_CRON_HOOK ) ) {
+                return;
+            }
+            wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::HOURS_CRON_HOOK );
+        }
+
+        /**
+         * v0.0.27 Part 3b. The hours cron callback.
+         *
+         * Blocks first and unconditionally: a disputed place id must never
+         * render, whether or not the feature is switched on. Then one
+         * sweep at details_ceiling, if enabled.
+         *
+         * The expiry of cached content is NOT here. avalon_places_purge()
+         * owns it, on the places cron, deliberately not gated on enabled.
+         * Two hooks running it would add nothing but a second place for
+         * it to be wrong.
+         *
+         * The record goes through the places log, never through
+         * avalon_flush_import_log(), which owns the CSV import cycle's
+         * override-log rotation. s0.233.
+         */
+        public function avalon_hours_cron(){
+            $blocked = $this->avalon_hours_sync_blocks( current_time( 'mysql', true ) );
+
+            $cfg = $this->avalon_hours_config();
+            if ( empty( $cfg['enabled'] ) ) {
+                return;
+            }
+
+            $out = $this->avalon_hours_sweep( (int) $cfg['details_ceiling'], false );
+
+            $this->avalon_import_log( array(
+                'stage'    => 'hours_sweep',
+                'action'   => 'swept',
+                'blocked'  => $blocked,
+                'scanned'  => $out['scanned'],
+                'ok'       => $out['ok'],
+                'none'     => $out['none'],
+                'struck'   => $out['struck'],
+                'failed'   => $out['failed'],
+                'systemic' => $out['systemic'],
+                'raced'    => $out['raced'],
+                'errors'   => implode( '; ', $out['errors'] ),
+            ) );
+            $this->avalon_places_log_flush();
+        }
+
+        /**
+         * v0.0.27 Part 3b. The valid hours subcommands, named once, for
+         * the reason avalon_places_subcommands() is.
+         */
+        public static function avalon_hours_subcommands(){
+            return array( 'sweep', 'release', 'status' );
+        }
+
+        /**
+         * v0.0.27 Part 3b. WP-CLI: wp avalon hours <subcommand>
+         *
+         *   status   counts by hours_status, closed dealers, the disputed
+         *            list against the table, and the next scheduled run.
+         *            Spends nothing.
+         *   sweep    one pass of the queue. --dry-run lists what is due
+         *            and spends nothing; --max-calls=<n> caps the pass at
+         *            n (1 or more), default details_ceiling. A real pass
+         *            blocks the disputed keys first, exactly as the cron
+         *            does.
+         *   release  --key=<address key> returns one blocked key to the
+         *            queue. Refused while the key is still listed; an
+         *            error when there was no blocked row to release.
+         *
+         * A bare `wp avalon hours` means status. An unknown subcommand is
+         * an error, never a status table - s0.232. A sweep that stopped on
+         * a systemic error exits through WP_CLI::error, because a refusal
+         * aimed at the project is not a successful run - s0.220.
+         *
+         * NO CAPABILITY CHECK, for the reason avalon_places_cli() gives.
+         * Invoke with --skip-plugins=revslider, never a bare
+         * --skip-plugins.
+         */
+        public function avalon_hours_cli( $args, $assoc = array() ){
+            global $wpdb;
+
+            $sub   = isset( $args[0] ) ? (string) $args[0] : 'status';
+            $table = self::avalon_hours_table();
+
+            if ( 'sweep' === $sub ) {
+                $dry = ! empty( $assoc['dry-run'] );
+                $max = 0;
+                if ( isset( $assoc['max-calls'] ) ) {
+                    //s0.265. The sweep reads 0 as "use details_ceiling", so
+                    //--max-calls=0, or a typo that casts to 0, would spend
+                    //the full ceiling. Refused before anything is spent.
+                    $raw = trim( (string) $assoc['max-calls'] );
+                    $max = (int) $raw;
+                    if ( $max < 1 || (string) $max !== $raw ) {
+                        WP_CLI::error( '--max-calls must be a whole number, 1 or more. Nothing was spent.' );
+                        return;
+                    }
+                }
+
+                $blocked = 0;
+                if ( ! $dry ) {
+                    $blocked = $this->avalon_hours_sync_blocks( current_time( 'mysql', true ) );
+                }
+
+                $out = $this->avalon_hours_sweep( $max, $dry );
+
+                WP_CLI::log( sprintf(
+                    'scanned %d  ok %d  none %d  struck %d  failed %d  systemic %d  raced %d',
+                    $out['scanned'], $out['ok'], $out['none'], $out['struck'],
+                    $out['failed'], $out['systemic'], $out['raced']
+                ) );
+
+                if ( $dry && ! empty( $out['due'] ) ) {
+                    WP_CLI::log( '' );
+                    WP_CLI::log( 'due, in the order they would be asked:' );
+                    foreach ( $out['due'] as $k ) {
+                        WP_CLI::log( '  ' . $k );
+                    }
+                }
+
+                if ( ! $dry ) {
+                    WP_CLI::log( sprintf( 'disputed rows newly blocked %d', $blocked ) );
+                    $this->avalon_import_log( array(
+                        'stage'    => 'hours_cli',
+                        'action'   => 'swept',
+                        'blocked'  => $blocked,
+                        'scanned'  => $out['scanned'],
+                        'ok'       => $out['ok'],
+                        'none'     => $out['none'],
+                        'struck'   => $out['struck'],
+                        'failed'   => $out['failed'],
+                        'systemic' => $out['systemic'],
+                        'raced'    => $out['raced'],
+                        'errors'   => implode( '; ', $out['errors'] ),
+                    ) );
+                    $this->avalon_places_log_flush();
+                }
+
+                if ( ! empty( $out['errors'] ) ) {
+                    WP_CLI::error( 'aborted on ' . $out['errors'][0] );
+                    return;
+                }
+
+                WP_CLI::success( $dry
+                    ? 'dry run, nothing spent and nothing written'
+                    : 'sweep complete' );
+                return;
+            }
+
+            if ( 'release' === $sub ) {
+                $key = isset( $assoc['key'] ) ? (string) $assoc['key'] : '';
+                if ( '' === $key ) {
+                    WP_CLI::error( '--key=<address key> is required.' );
+                    return;
+                }
+                $r = $this->avalon_hours_release( $key );
+                if ( ! is_int( $r ) ) {
+                    WP_CLI::error( $r );
+                    return;
+                }
+                if ( $r < 1 ) {
+                    //s0.265. A key that is absent, or not blocked, released
+                    //nothing. Success here would read as done.
+                    WP_CLI::error( 'nothing released: no blocked row for '
+                        . strtolower( trim( $key ) ) . ' in this table.' );
+                    return;
+                }
+                WP_CLI::success( sprintf( '%d key(s) returned to pending', $r ) );
+                return;
+            }
+
+            if ( 'status' !== $sub ) {
+                WP_CLI::error( sprintf(
+                    'unknown subcommand "%s". Valid: %s',
+                    $sub,
+                    implode( ', ', self::avalon_hours_subcommands() )
+                ) );
+                return;
+            }
+
+            $counts = $wpdb->get_results(
+                "SELECT hours_status, COUNT(*) AS n FROM {$table} GROUP BY hours_status",
+                ARRAY_A
+            );
+            //s0.264, here too. A refused read is not an empty table.
+            if ( '' !== (string) $wpdb->last_error ) {
+                WP_CLI::error( 'status could not read the table: ' . $wpdb->last_error );
+                return;
+            }
+            if ( ! is_array( $counts ) || empty( $counts ) ) {
+                WP_CLI::log( 'queue empty' );
+                return;
+            }
+            foreach ( $counts as $r ) {
+                WP_CLI::log( sprintf( '%-8s %d', $r['hours_status'], (int) $r['n'] ) );
+            }
+
+            $closed = $wpdb->get_results(
+                "SELECT business_status, COUNT(*) AS n FROM {$table}"
+                . " WHERE business_status IS NOT NULL AND business_status <> 'OPERATIONAL'"
+                . " GROUP BY business_status",
+                ARRAY_A
+            );
+            if ( is_array( $closed ) ) {
+                foreach ( $closed as $r ) {
+                    WP_CLI::log( sprintf( '%-8s %d  (never rendered)', $r['business_status'], (int) $r['n'] ) );
+                }
+            }
+
+            //s0.265. The list empties when Part 3e corrects the last key, and
+            //IN () is a syntax error. The sweep and sync already guard it.
+            $keys    = array_keys( self::avalon_hours_disputed_keys() );
+            $held    = array();
+            $marked  = 0;
+            $present = 0;
+            if ( ! empty( $keys ) ) {
+                $held = $wpdb->get_results( $wpdb->prepare(
+                    "SELECT hours_status, COUNT(*) AS n FROM {$table}"
+                    . " WHERE address_key IN ("
+                    . implode( ', ', array_fill( 0, count( $keys ), '%s' ) ) . ")"
+                    . " GROUP BY hours_status",
+                    $keys
+                ), ARRAY_A );
+            }
+            if ( is_array( $held ) ) {
+                foreach ( $held as $r ) {
+                    $present += (int) $r['n'];
+                    if ( self::HOURS_STATUS_BLOCKED === $r['hours_status'] ) {
+                        $marked += (int) $r['n'];
+                    }
+                }
+            }
+            WP_CLI::log( sprintf( 'disputed listed %d  in this table %d  marked blocked %d',
+                count( $keys ), $present, $marked ) );
+
+            $next = wp_next_scheduled( self::HOURS_CRON_HOOK );
+            WP_CLI::log( 'next sweep ' . ( $next
+                ? gmdate( 'Y-m-d H:i:s', (int) $next ) . ' UTC'
+                : 'NOT SCHEDULED' ) );
         }
 
         public function avalon_rest_protected_slugs(){
@@ -3711,20 +4193,39 @@ if (!class_exists('SLP_Avalon')){
          * place_id to be held indefinitely and cap every other field at 30
          * days. Setting AVALON_HOURS_ENABLED false to turn the feature off
          * must not leave cached hours sitting past their TTL forever - the
-         * expiry is a licence obligation, not a feature. The resolve branch
-         * Part 3b adds to avalon_places_cron() is the part that reads
-         * enabled.
+         * expiry is a licence obligation, not a feature.
          *
          * place_id, place_status and place_checked_at are never touched
          * here, for the same reason: they are the one thing the terms let
          * us keep.
          *
-         * Two TTLs, two sweeps. A negative result is cheap to refetch and
-         * worth retiring sooner; one cutoff for both would hold whichever
-         * is longer against each.
+         * Two TTLs. A negative result is cheap to refetch and worth
+         * retiring sooner; one cutoff for both would hold whichever is
+         * longer against each.
          *
          * Driven off KEY hours_sweep (hours_status, fetched_at), which
          * exists for exactly this query.
+         *
+         * v0.0.27 Part 3b, s0.257. Two gaps closed. none rows hold a cached
+         * Place too - the payload and its raw response - and were never
+         * retired; they now go on the positive TTL with ok rows. And
+         * business_status, with the three Place columns nothing fills yet,
+         * is cleared with the payload: it is Places content under the same
+         * cap, and a stale CLOSED_* would go on hiding a dealer that
+         * reopened.
+         *
+         * s0.263. Content held under any OTHER status is under the same
+         * cap. A strike clears its own row, so this should find nothing;
+         * it is here for a row blocked by hand with its payload in place,
+         * or released from one. Those keep their status - clearing a hand
+         * block would ask about a place someone decided must not be asked
+         * about - and lose only the content.
+         *
+         * In steady state this clears nothing. The sweep re-asks ok and
+         * none rows HOURS_REFRESH_MARGIN_DAYS before the cap (s0.262), so
+         * the purge acts only when the sweep is not running - disabled,
+         * refused or unscheduled - which is exactly when the licence still
+         * has to be honoured.
          *
          * @return int rows cleared.
          */
@@ -3737,8 +4238,9 @@ if (!class_exists('SLP_Avalon')){
             $purged = 0;
 
             $sweeps = array(
-                self::PLACES_STATUS_OK     => (int) $cfg['positive_ttl_days'],
-                self::PLACES_STATUS_FAILED => (int) $cfg['negative_ttl_days'],
+                self::HOURS_STATUS_OK     => (int) $cfg['positive_ttl_days'],
+                self::HOURS_STATUS_NONE   => (int) $cfg['positive_ttl_days'],
+                self::HOURS_STATUS_FAILED => (int) $cfg['negative_ttl_days'],
             );
 
             foreach ( $sweeps as $status => $days ) {
@@ -3746,9 +4248,11 @@ if (!class_exists('SLP_Avalon')){
                 $n = $wpdb->query(
                     $wpdb->prepare(
                         "UPDATE {$table} SET hours_json = NULL, attribution_json = NULL,"
+                        . " business_status = NULL, primary_type_display = NULL,"
+                        . " locality = NULL, admin_area = NULL,"
                         . " hours_status = %s, fetched_at = NULL, updated_at = %s"
                         . " WHERE hours_status = %s AND fetched_at IS NOT NULL AND fetched_at < %s",
-                        self::PLACES_STATUS_PENDING,
+                        self::HOURS_STATUS_PENDING,
                         $now,
                         $status,
                         $cutoff
@@ -3757,6 +4261,30 @@ if (!class_exists('SLP_Avalon')){
                 if ( is_numeric( $n ) ) {
                     $purged += (int) $n;
                 }
+            }
+
+            //s0.263. Content under pending or blocked: cleared, status kept.
+            //A NULL fetched_at is content of unknown age, and goes too.
+            $cutoff = gmdate( 'Y-m-d H:i:s',
+                              time() - ( (int) $cfg['positive_ttl_days'] * DAY_IN_SECONDS ) );
+            $n = $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE {$table} SET hours_json = NULL, attribution_json = NULL,"
+                    . " business_status = NULL, primary_type_display = NULL,"
+                    . " locality = NULL, admin_area = NULL, updated_at = %s"
+                    . " WHERE hours_status IN (%s, %s)"
+                    . " AND ( hours_json IS NOT NULL OR attribution_json IS NOT NULL"
+                    . " OR business_status IS NOT NULL OR primary_type_display IS NOT NULL"
+                    . " OR locality IS NOT NULL OR admin_area IS NOT NULL )"
+                    . " AND ( fetched_at IS NULL OR fetched_at < %s )",
+                    $now,
+                    self::HOURS_STATUS_PENDING,
+                    self::HOURS_STATUS_BLOCKED,
+                    $cutoff
+                )
+            );
+            if ( is_numeric( $n ) ) {
+                $purged += (int) $n;
             }
 
             if ( $purged > 0 ) {

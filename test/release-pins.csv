@@ -1,6 +1,6 @@
 RelativePath,MD5Hash
 slp-plugins\slp_avalon\assets\js\slp_avalon.js,95c1ab2471359c2e080dc8477e1981fd
-slp-plugins\slp_avalon\inc\class.slp_avalon.php,8bc1724a7e932fed0bfc7cb18e6cd39f
+slp-plugins\slp_avalon\inc\class.slp_avalon.php,3bd2094189c58318a827ca01f990f4fc
 slp-plugins\slp_avalon\slp_avalon.php,722c773a929cea089521bf502a9e8e23
 slp-plugins\.gitattributes,04834ee26f61a5bea9c2a1af9334d9fa
 slp-plugins\store-locator-le\js\slp_core.js,a751bea043c19472ec6453aff93f84a9
@@ -21,3 +21,6 @@ slp-plugins\build\control-v030.py,84d62e10a280f376666d5d58eb5121c8
 slp-plugins\build\build-v027.py,30bcd42c75f7b0c07c1322fe4d70f30e
 slp-plugins\build\build-v027-part2.py,09deec25ec976bf9f56380f157ef178c
 slp-plugins\build\build-v027-part3a.py,39e01e5bc24ae4e60ea29ee8ffc23aa3
+slp-plugins\test\suite-v031.php,9cc8a3c24704f39d3582aae06dae7463
+slp-plugins\build\control-v031.py,e9cd96cf8fc75f4074d5169aa145eaa0
+slp-plugins\build\build-v027-part3b.py,9a31c661d6f3de2f6b6762c992c77762
