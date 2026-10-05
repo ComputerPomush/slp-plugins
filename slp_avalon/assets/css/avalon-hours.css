@@ -1,0 +1,202 @@
+/*!
+ * avalon-hours.css
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4.
+ *
+ * Google-style opening hours on store pages and find-a-dealer result cards.
+ * One stylesheet for both surfaces, shipped with the plugin so it travels to
+ * Tahoe and Avalon; the child theme's store-pages.css loads only on store
+ * pages and cannot reach /find-a-dealer/.
+ *
+ * COLOURS are Google's dark-theme status colours, measured against Aura's
+ * backgrounds (WCAG contrast, 2026-10-03):
+ *
+ *                          store #000   card rest   card hover   #2a2a2a
+ *   open    #81c995           10.72        8.89        8.41        7.33
+ *   closed  #f28b82            8.79        7.29        6.90        6.01
+ *   soon    #fcad70           11.35        9.41        8.91        7.76
+ *
+ * card rest = rgba(255,255,255,.1) over #000; card hover = rgba(222,139,13,.2)
+ * over #000; #2a2a2a = a worst case for the store page's background image.
+ * A site on a light background overrides the three custom properties.
+ *
+ * The brand pink is NOT used for the card's tel: link: 3.98 on a card at
+ * rest and 3.77 on hover, under 4.5. The link is the text colour, underlined.
+ *
+ * THE STORE PAGE FOLDS AT ELEMENTOR'S MOBILE BREAKPOINT, 767px here. The
+ * plugin adds an override when a site has moved it. Both copies of the week
+ * are in the markup; this file shows one, so a phone gets the folded line on
+ * its first frame, with no script involved.
+ *
+ * TABLES. Hello Elementor stripes and borders every table, at specificity
+ * 0-1-4 (table tbody>tr:nth-child(odd)>td). The rules below are 0-2-3 and
+ * up, so they win without !important.
+ */
+
+.avalon-hours {
+  --avalon-hours-open: #81c995;
+  --avalon-hours-closed: #f28b82;
+  --avalon-hours-soon: #fcad70;
+}
+
+/* ------------------------------------------------------------ status line */
+
+.avalon-hours .avalon-hours__word {
+  font-weight: 700;
+}
+
+.avalon-hours .avalon-hours__word--open {
+  color: var(--avalon-hours-open);
+}
+
+.avalon-hours .avalon-hours__word--closed {
+  color: var(--avalon-hours-closed);
+}
+
+.avalon-hours .avalon-hours__word--soon {
+  color: var(--avalon-hours-soon);
+}
+
+/* ------------------------------------------------------------------ week */
+
+.avalon-hours .avalon-hours__week {
+  width: auto;
+  margin: 6px 0 0;
+  border: 0;
+  border-collapse: collapse;
+  background: transparent;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.avalon-hours .avalon-hours__week tbody > tr > th,
+.avalon-hours .avalon-hours__week tbody > tr > td {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
+  vertical-align: top;
+}
+
+.avalon-hours .avalon-hours__week tbody > tr > th {
+  padding-right: 24px;
+}
+
+.avalon-hours .avalon-hours__week tbody > tr.is-today > th,
+.avalon-hours .avalon-hours__week tbody > tr.is-today > td {
+  font-weight: 700;
+}
+
+/* ------------------------------------------------- the fold (<details>) */
+
+.avalon-hours .avalon-hours__summary {
+  display: list-item;
+  cursor: pointer;
+  list-style: none;
+}
+
+.avalon-hours .avalon-hours__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The caret is drawn, not typed: a character in generated content becomes
+   part of the summary's spoken name in some screen readers. */
+.avalon-hours .avalon-hours__summary::after {
+  content: "";
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin: 0 0 0.2em 0.5em;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  vertical-align: middle;
+  transform: rotate(45deg);
+  transition: transform 0.2s;
+}
+
+.avalon-hours .avalon-hours__narrow[open] > .avalon-hours__summary::after {
+  margin-bottom: -0.1em;
+  transform: rotate(-135deg);
+}
+
+.avalon-hours .avalon-hours__summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avalon-hours .avalon-hours__summary::after {
+    transition: none;
+  }
+}
+
+/* --------------------------------------------------------- attributions */
+
+.avalon-hours .avalon-hours__attr {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.avalon-hours .avalon-hours__attr a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* On the store page the block sits inside the theme's
+   storelocator_address_container, whose links store-pages.css turns brand
+   pink at 0-4-2 (body.single-store_page .storelocator_address_container
+   a:not(.btn):not(.button)): 3.32 on #000 at this size and opacity, under
+   4.5. This is 0-5-1. */
+.avalon-hours--store.storelocator_address_container .avalon-hours__attr a:not(.btn):not(.button) {
+  color: inherit;
+}
+
+/* ----------------------------------------------------------- store page */
+
+.avalon-hours--store .avalon-hours__wide .avalon-hours__status {
+  min-height: 1.5em;
+  margin: 0;
+}
+
+.avalon-hours--store .avalon-hours__narrow {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .avalon-hours--store .avalon-hours__wide {
+    display: none;
+  }
+
+  .avalon-hours--store .avalon-hours__narrow {
+    display: block;
+  }
+}
+
+/* --------------------------------------------------------- result cards */
+
+.avalon-hours--card {
+  display: block;
+  margin: 0;
+}
+
+.avalon-label {
+  font-weight: 700;
+}
+
+.sl_contact__info a.avalon-tel,
+a.avalon-tel {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sl_contact__info a.avalon-tel:hover,
+.sl_contact__info a.avalon-tel:focus-visible,
+a.avalon-tel:hover,
+a.avalon-tel:focus-visible {
+  text-decoration-thickness: 2px;
+}
