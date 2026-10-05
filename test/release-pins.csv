@@ -1,6 +1,6 @@
 RelativePath,MD5Hash
-slp-plugins\slp_avalon\assets\js\slp_avalon.js,95c1ab2471359c2e080dc8477e1981fd
-slp-plugins\slp_avalon\inc\class.slp_avalon.php,da3bd46a6af3b34a9552f6b1119dc13f
+slp-plugins\slp_avalon\assets\js\slp_avalon.js,717a21bdb5b8f416a73da69b70b6b8d3
+slp-plugins\slp_avalon\inc\class.slp_avalon.php,12cde985f071d0e77d2ca1acf935d426
 slp-plugins\slp_avalon\slp_avalon.php,722c773a929cea089521bf502a9e8e23
 slp-plugins\.gitattributes,04834ee26f61a5bea9c2a1af9334d9fa
 slp-plugins\store-locator-le\js\slp_core.js,a751bea043c19472ec6453aff93f84a9
@@ -24,7 +24,7 @@ slp-plugins\build\build-v027-part3a.py,39e01e5bc24ae4e60ea29ee8ffc23aa3
 slp-plugins\test\suite-v031.php,9cc8a3c24704f39d3582aae06dae7463
 slp-plugins\build\control-v031.py,e9cd96cf8fc75f4074d5169aa145eaa0
 slp-plugins\build\build-v027-part3b.py,9a31c661d6f3de2f6b6762c992c77762
-slp-plugins\slp_avalon\assets\css\avalon-hours.css,1fd4083289b335140a0196bf62e54605
+slp-plugins\slp_avalon\assets\css\avalon-hours.css,d24269039747a7d04c7ce931ef02c2ec
 slp-plugins\slp_avalon\assets\js\avalon-hours.js,76a62b751b5556b96b79c2734b05dca8
 slp-plugins\test\suite-v032.php,8ff4eb8d1055b2f13abfcf773301ee11
 slp-plugins\test\suite-hours.js,3b82f36f41945a6288718bd0e58c54b8
@@ -34,3 +34,7 @@ slp-plugins\build\build-v027-part4b.py,59686b2f5b1839a8d6edb74acf4aa28f
 slp-plugins\test\suite-v033.php,03bdb5965f3ad57eda8dcf23cbb27d5a
 slp-plugins\test\suite-bubble.js,3ee9c7cf2223acf149668798e66c05d1
 slp-plugins\build\control-v033.py,1683418fa311370f4d54fa7978adeee1
+slp-plugins\build\build-v027-part4c.py,f20b4759d7b663ef22095b7bed324c04
+slp-plugins\test\suite-v034.php,59afa37eefb4ece32e591b775d173323
+slp-plugins\test\suite-map.js,96efef5b3369891fffafc232c4720420
+slp-plugins\build\control-v034.py,a9c88c9c20d65a96f6b169915c1f07d5

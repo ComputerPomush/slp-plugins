@@ -374,6 +374,21 @@ if (!class_exists('SLP_Avalon')){
             add_filter('slp_js_options', array(self::$instance,'avalon_js_options_bubble'), 100, 1);
             add_filter('rocket_rucss_safelist', array('SLP_Avalon','avalon_rocket_rucss_safelist_bubble'));
             //
+            // v0.0.27 Part 4c. The address on two lines; labels that can be
+            // icons; the hover pin's URL for slp_avalon.js.
+            //
+            // The address field onto every marker at 30, after Part 4's
+            // labels at 20 and Part 4b's email at 25: it reads the marker's
+            // own address values, as SLP Experience left them at 15. The
+            // layouts at 110, after Part 4's and 4b's callbacks at 100 have
+            // put their fields in: the address run becomes the one field,
+            // and "Distance:" a label. The new selectors onto WP Rocket's
+            // safelist; a no-op where WP Rocket is not installed.
+            add_filter('slp_results_marker_data', array(self::$instance,'avalon_marker_address'), 30, 1);
+            add_filter('slp_javascript_results_string', array(self::$instance,'avalon_results_layout_address'), 110, 1);
+            add_filter('slp_js_options', array(self::$instance,'avalon_js_options_map'), 110, 1);
+            add_filter('rocket_rucss_safelist', array('SLP_Avalon','avalon_rocket_rucss_safelist_map'));
+            //
             // WP-CLI, inline and guarded - deliberately NOT a new file.
             // A require_once of a file that has not landed yet is fatal,
             // and Part 2 already paid that deploy-ordering tax once.
@@ -4516,7 +4531,7 @@ if (!class_exists('SLP_Avalon')){
             ) ) );
 
             $summary = '<summary class="avalon-hours__summary">'
-                     . ( $card ? '<b class="avalon-label">Hours:</b> ' : '' )
+                     . ( $card ? '<b class="avalon-label avalon-label--hours">Hours:</b> ' : '' )
                      . '<span class="avalon-hours__status">See hours</span></summary>';
             $narrow  = '<details class="avalon-hours__narrow">' . $summary . $table . $attr . '</details>';
 
@@ -4640,11 +4655,11 @@ if (!class_exists('SLP_Avalon')){
             if ( '' !== $phone ) {
                 $tel = ( false !== strpos( $phone, '<' ) ) ? ''
                        : self::avalon_tel( isset( $raw['sl_phone'] ) ? $raw['sl_phone'] : '', $country );
-                $marker['avalon_phone_html'] = '<b class="avalon-label">Phone:</b> '
+                $marker['avalon_phone_html'] = '<b class="avalon-label avalon-label--phone">Phone:</b> '
                     . ( '' !== $tel ? '<a class="avalon-tel" href="tel:' . $tel . '">' . $phone . '</a>' : $phone );
             }
             if ( '' !== ( isset( $marker['address'] ) ? trim( (string) $marker['address'] ) : '' ) ) {
-                $marker['avalon_address_label'] = '<b class="avalon-label">Address:</b> ';
+                $marker['avalon_address_label'] = '<b class="avalon-label avalon-label--address">Address:</b> ';
             }
             return $marker;
         }
@@ -4980,7 +4995,7 @@ if (!class_exists('SLP_Avalon')){
             if ( '' === $text ) {
                 return $marker;
             }
-            $marker['avalon_email_html'] = '<b class="avalon-label">Email:</b> '
+            $marker['avalon_email_html'] = '<b class="avalon-label avalon-label--email">Email:</b> '
                 . ( '' !== $to
                     ? '<a class="avalon-email" href="' . esc_url( 'mailto:' . $to, array( 'mailto' ) )
                       . '" target="_blank" rel="noopener">' . $text . '</a>'
@@ -5112,6 +5127,327 @@ if (!class_exists('SLP_Avalon')){
             $list[] = '(.*).avalon-email(.*)';
             $list[] = '(.*).avalon-bubble-distance(.*)';
             $list[] = '(.*).slp_info_bubble(.*)';
+            return $list;
+        }
+
+        /**
+         * v0.0.27 Part 4c. Cards and bubbles laid out for phones.
+         *
+         * Asked for on 2026-10-04 and settled on 2026-10-05, after Part 4b
+         * went live on Aura DEV (the owner's words are in the rev46
+         * addendum):
+         *
+         *   - the address on two aligned lines, on the result cards and in
+         *     the bubble, at every width: the street, then "City, ST ZIP";
+         *     Canada in the same order (the owner's choice)
+         *   - no country for the United States or Canada; any other
+         *     country after the postal code
+         *   - the state or province as its two-letter code where the feed
+         *     spells it out (14 of Aura's 313 rows), on screen only: the
+         *     feed, the locator row and the address key are untouched
+         *   - on phones, the five labels as Font Awesome icons
+         *     (avalon-hours.css), so each label now names its kind in a
+         *     modifier class: avalon-label--distance, --address, --phone,
+         *     --email, --hours
+         *
+         * How the bubble behaves on the map - opening, closing, where focus
+         * goes, the hovered pin, the map's controls - is slp_avalon.js's.
+         * What it needs from here is one setting: the hover pin's URL, in
+         * the script options as avalon_map_hover_icon.
+         *
+         * Every layout step finds its own anchor and is skipped, not forced,
+         * when the anchor is absent or its field is already there, so a
+         * layout this does not recognise is left as it was and a second
+         * pass changes nothing. Every insertion is made by offset, never
+         * through a regex replacement string.
+         */
+
+        /**
+         * v0.0.27 Part 4c. A state or province as shown: its two-letter
+         * code when the address key knows the name, else as given.
+         *
+         * The address key's own normaliser (SLP_Avalon_AddressKey::
+         * norm_state) maps the 51 US and 16 Canadian names it carries -
+         * "Ontario" and "Ont" to ON, "Quebec" to QC - and passes a known
+         * code through, in any case and with its dots and stray spaces
+         * gone ("n.y. " is NY). A name it does not know, a Mexican state
+         * say, comes back as the feed wrote it. Two letters it does not
+         * know come back as those letters upper-cased - "Xx" as XX - the
+         * form a state code takes.
+         */
+        public static function avalon_display_state( $state ){
+            $state = (string) $state;
+            if ( '' === $state || ! class_exists( 'SLP_Avalon_AddressKey' ) ) {
+                return $state;
+            }
+            $code = SLP_Avalon_AddressKey::norm_state( $state );
+            return preg_match( '/^[A-Z]{2}$/', $code ) ? $code : $state;
+        }
+
+        /**
+         * v0.0.27 Part 4c. The address as two lines, as a marker field.
+         *
+         *   line 1  the street, and address2 after a comma
+         *   line 2  "City, ST ZIP" - SLP's own city_state_zip order and
+         *           punctuation (SLP_Location_Utilities::
+         *           create_city_state_zip()), with the state as
+         *           avalon_display_state() shows it; then the country,
+         *           unless it is the United States or Canada
+         *
+         * Read from the marker's own values, as SLP built them and SLP
+         * Experience left them at 15 - its show_country empties the
+         * country - decoded, then escaped once here. A no-break space
+         * counts as a space. A line that comes out empty is left out, and
+         * with no line at all there is no field: never "Address:" over
+         * nothing. Like Part 4's fields it is a string, as SLP's
+         * replace_shortcodes() needs (s0.277).
+         */
+        public static function avalon_address_fields( $marker ){
+            $val = array();
+            foreach ( array( 'address', 'address2', 'city', 'state', 'zip', 'country' ) as $k ) {
+                $val[ $k ] = ( isset( $marker[ $k ] ) && is_scalar( $marker[ $k ] ) )
+                    ? trim( str_replace( "\xC2\xA0", ' ',
+                            html_entity_decode( (string) $marker[ $k ], ENT_QUOTES, 'UTF-8' ) ) )
+                    : '';
+            }
+            $state = self::avalon_display_state( $val['state'] );
+
+            $one = $val['address'];
+            if ( '' !== $val['address2'] ) {
+                $one .= ( '' !== $one ? ', ' : '' ) . $val['address2'];
+            }
+
+            $two = '';
+            if ( '' !== $val['city'] ) {
+                $two = $val['city'] . ( '' !== $state ? ',' : '' )
+                     . ( ( '' !== $state || '' !== $val['zip'] ) ? ' ' : '' );
+            }
+            if ( '' !== $state ) {
+                $two .= $state . ( '' !== $val['zip'] ? ' ' : '' );
+            }
+            $two .= $val['zip'];
+            if ( '' !== $val['country'] && class_exists( 'SLP_Avalon_AddressKey' )
+                 && ! in_array( SLP_Avalon_AddressKey::norm_country( $val['country'], '', '' ), array( 'US', 'CA' ), true ) ) {
+                $two .= ( '' !== $two ? ' ' : '' ) . $val['country'];
+            }
+
+            $lines = '';
+            foreach ( array( $one, $two ) as $line ) {
+                $line = esc_html( $line );
+                if ( '' !== $line ) {
+                    $lines .= '<span class="avalon-address__line">' . $line . '</span>';
+                }
+            }
+            if ( '' === $lines ) {
+                return $marker;
+            }
+            $marker['avalon_address_html'] = '<b class="avalon-label avalon-label--address">Address:</b> '
+                . '<span class="avalon-address__lines">' . $lines . '</span>';
+            return $marker;
+        }
+
+        /**
+         * v0.0.27 Part 4c. The two-line address, onto every marker.
+         *
+         * On slp_results_marker_data at 30, after Part 4's labels at 20 and
+         * Part 4b's email at 25, for the reason they are there: both marker
+         * builders apply it, so the field is wherever SLP renders a card or
+         * a bubble. No read.
+         */
+        public function avalon_marker_address( $marker ){
+            return is_array( $marker ) ? self::avalon_address_fields( $marker ) : $marker;
+        }
+
+        /**
+         * v0.0.27 Part 4c. "Distance:" in a layout, made a label.
+         *
+         * The card's results layout and Part 4b's bubble line both write
+         * "Distance:" as plain text at the start of their span; as a label
+         * it can be an icon on a phone like the other four. Skipped when
+         * the span is absent, when it does not start with exactly
+         * "Distance:", or when the label is already there.
+         */
+        public static function avalon_layout_distance_label( $layout, $class ){
+            $layout = (string) $layout;
+            if ( false !== strpos( $layout, 'avalon-label--distance' )
+                 || ! preg_match( '/<span\b[^>]*\sclass="[^"]*\b' . preg_quote( $class, '/' ) . '\b[^"]*"[^>]*>\s*(Distance:)/',
+                                  $layout, $m, PREG_OFFSET_CAPTURE ) ) {
+                return $layout;
+            }
+            return substr_replace( $layout, '<span class="avalon-label avalon-label--distance">Distance:</span>',
+                                   $m[1][1], strlen( $m[1][0] ) );
+        }
+
+        /**
+         * v0.0.27 Part 4c. One address span made the two-line field.
+         *
+         * $tag finds the span's opening tag. Its content must be the street
+         * field alone - [slp_location address ...], with Part 4's Address:
+         * label before it or not, and white space round either - or the
+         * span is left as it was. The span keeps its attributes and gains
+         * the class avalon-address.
+         */
+        private static function avalon_layout_address_span( $layout, $tag ){
+            if ( ! preg_match( $tag, $layout, $t, PREG_OFFSET_CAPTURE )
+                 || ! preg_match( '/\G\s*(?:\[slp_location avalon_address_label\]\s*)?\[slp_location\s+address\b[^\]]*\]\s*<\/span>/',
+                                  $layout, $c, 0, $t[0][1] + strlen( $t[0][0] ) ) ) {
+                return $layout;
+            }
+            $open = $t[0][0];
+            if ( preg_match( '/\sclass="([^"]*)"/', $open, $k, PREG_OFFSET_CAPTURE ) ) {
+                $open = substr_replace( $open, ' avalon-address', $k[1][1] + strlen( $k[1][0] ), 0 );
+            } else {
+                $open = substr( $open, 0, -1 ) . ' class="avalon-address">';
+            }
+            return substr_replace( $layout, $open . '[slp_location avalon_address_html]</span>',
+                                   $t[0][1], strlen( $t[0][0] ) + strlen( $c[0] ) );
+        }
+
+        /**
+         * v0.0.27 Part 4c. The first span $re finds, and the white space
+         * before it, taken out of a layout; the layout as it was when $re
+         * finds none.
+         */
+        private static function avalon_layout_drop_span( $layout, $re ){
+            if ( preg_match( $re, $layout, $m, PREG_OFFSET_CAPTURE ) ) {
+                $layout = substr_replace( $layout, '', $m[0][1], strlen( $m[0][0] ) );
+            }
+            return $layout;
+        }
+
+        /**
+         * v0.0.27 Part 4c. The two-line address and the Distance: label,
+         * into the results layout - the cards.
+         *
+         *   Distance:  wrapped as a label in the location_distance span
+         *   Address:   the street span carries the two-line field
+         *   the rest   the address2, city_state_zip and country spans, each
+         *              holding nothing but its own field, go - but only
+         *              once the field is in, so a layout whose street span
+         *              this does not recognise keeps its city
+         *
+         * On slp_javascript_results_string and, through
+         * avalon_js_options_map(), on slp_js_options, both at 110: after
+         * Part 4's fields went in at 100, so its Address: label is there to
+         * be replaced, and after SLP Experience at 90. A Part 4 hours slot
+         * after the city line (SLP's default layout) stays where it is.
+         *
+         * ADDRESS: ONCE. SLP runs slp_javascript_results_string inside its
+         * own slp_js_options callback at 10 (add_to_js_options() calls
+         * set_ResultsLayout( false, true )), so the layout reaches Part 4's
+         * slp_js_options callback at 100 with the field already in. That
+         * callback finds no Address: label and puts one back, at the start
+         * of the street span - straight before the field, which carries its
+         * own. Wherever the field is, a label straight before it is taken
+         * out again here.
+         */
+        public function avalon_results_layout_address( $layout ){
+            $layout = self::avalon_layout_distance_label( (string) $layout, 'location_distance' );
+            if ( false === strpos( $layout, 'avalon_address_html' ) ) {
+                $layout = self::avalon_layout_address_span( $layout,
+                    '/<span\b[^>]*\sclass="[^"]*\bslp_result_street\b[^"]*"[^>]*>/' );
+            }
+            if ( false !== strpos( $layout, 'avalon_address_html' ) ) {
+                $layout = str_replace( '[slp_location avalon_address_label][slp_location avalon_address_html]',
+                                       '[slp_location avalon_address_html]', $layout );
+                foreach ( array( 'slp_result_street2' => 'address2', 'slp_result_citystatezip' => 'city_state_zip',
+                                 'slp_result_country' => 'country' ) as $class => $field ) {
+                    $layout = self::avalon_layout_drop_span( $layout,
+                        '/\s*<span\b[^>]*\sclass="[^"]*\b' . $class . '\b[^"]*"[^>]*>\s*\[slp_location\s+'
+                        . $field . '\b[^\]]*\]\s*<\/span>/' );
+                }
+            }
+            return $layout;
+        }
+
+        /**
+         * v0.0.27 Part 4c. The same, into the bubble layout.
+         *
+         * Part 4b's Distance: line and SLP's slp_bubble_address span - the
+         * ids SLP's default layout and Aura's both carry. The address2,
+         * city, state, zip and country spans go once the field is in; the
+         * country span may be SLP's own pair, one inside the other. As on
+         * the cards, an Address: label straight before the field - Part
+         * 4b's, put back by a second pass over a layout that already has
+         * the field - is taken out.
+         */
+        public function avalon_bubble_layout_address( $layout ){
+            $layout = self::avalon_layout_distance_label( (string) $layout, 'avalon-bubble-distance' );
+            if ( false === strpos( $layout, 'avalon_address_html' ) ) {
+                $layout = self::avalon_layout_address_span( $layout, '/<span\b[^>]*\sid="slp_bubble_address"[^>]*>/' );
+            }
+            if ( false !== strpos( $layout, 'avalon_address_html' ) ) {
+                $layout = str_replace( '[slp_location avalon_address_label][slp_location avalon_address_html]',
+                                       '[slp_location avalon_address_html]', $layout );
+                foreach ( array( 'address2', 'city', 'state', 'zip' ) as $field ) {
+                    $layout = self::avalon_layout_drop_span( $layout,
+                        '/\s*<span\b[^>]*\sid="slp_bubble_' . $field . '"[^>]*>\s*\[slp_location\s+'
+                        . $field . '\b[^\]]*\]\s*<\/span>/' );
+                }
+                $layout = self::avalon_layout_drop_span( $layout,
+                    '/\s*<span\b[^>]*\sid="slp_bubble_country"[^>]*>\s*(?:<span\b[^>]*\sid="slp_bubble_country"[^>]*>\s*'
+                    . '\[slp_location\s+country\b[^\]]*\]\s*<\/span>|\[slp_location\s+country\b[^\]]*\])\s*<\/span>/' );
+            }
+            return $layout;
+        }
+
+        /**
+         * v0.0.27 Part 4c. The hover pin's URL, or ''.
+         *
+         * The option avalon_map_hover_icon: an http(s) URL, or a path from
+         * the site's root (/wp-content/uploads/...), which travels from DEV
+         * to LIVE unchanged and which slp_avalon.js resolves against the
+         * page. Anything else - empty, protocol-relative, another scheme -
+         * is no hover pin: the pin keeps its icon and is only raised.
+         */
+        public static function avalon_map_hover_icon(){
+            $v = trim( (string) get_option( 'avalon_map_hover_icon', '' ) );
+            if ( '' === $v || 0 === strpos( $v, '//' )
+                 || ( '/' !== $v[0] && ! preg_match( '#^https?://#i', $v ) ) ) {
+                return '';
+            }
+            return (string) esc_url_raw( $v, array( 'http', 'https' ) );
+        }
+
+        /**
+         * v0.0.27 Part 4c. The layouts and the hover pin, in the script options.
+         *
+         * On slp_js_options at 110, after Part 4's and Part 4b's callbacks
+         * at 100 and SLP Experience at 90: whichever results and bubble
+         * layouts won are the ones given the two-line address, and the
+         * hover pin's URL rides along as avalon_map_hover_icon - always
+         * set, '' when there is none. Layouts that are not strings, and
+         * options that are not an array, pass through.
+         */
+        public function avalon_js_options_map( $options ){
+            if ( ! is_array( $options ) ) {
+                return $options;
+            }
+            if ( isset( $options['resultslayout'] ) && is_string( $options['resultslayout'] ) ) {
+                $options['resultslayout'] = $this->avalon_results_layout_address( $options['resultslayout'] );
+            }
+            if ( isset( $options['bubblelayout'] ) && is_string( $options['bubblelayout'] ) ) {
+                $options['bubblelayout'] = $this->avalon_bubble_layout_address( $options['bubblelayout'] );
+            }
+            $options['avalon_map_hover_icon'] = self::avalon_map_hover_icon();
+            return $options;
+        }
+
+        /**
+         * v0.0.27 Part 4c. WP Rocket: the new selectors, beside Part 4's and 4b's.
+         *
+         * Cards, bubbles and the .avalon-fa class all appear only after a
+         * search, a click or a script, so Remove Unused CSS never sees
+         * them; written from the selector's start as WP Rocket 3.11.0.2
+         * and later read them (s0.284). .gm-style covers the map's own
+         * images, #map_sidebar the cards' type sizes on a phone.
+         */
+        public static function avalon_rocket_rucss_safelist_map( $list ){
+            $list   = is_array( $list ) ? $list : array();
+            $list[] = '(.*).avalon-address(.*)';
+            $list[] = '(.*).avalon-fa(.*)';
+            $list[] = '(.*)#map_sidebar(.*)';
+            $list[] = '(.*).gm-style(.*)';
             return $list;
         }
 

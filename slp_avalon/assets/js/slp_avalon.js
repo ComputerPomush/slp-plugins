@@ -1237,8 +1237,13 @@
      * @return  {object}                  Modified map options.
      */
     slp_Filter("map_options").publish(avalon_cslmap.options);
+    //v0.0.27 Part 4c. The store page's controls, set after the filter so
+    //that nothing subscribed to it can take them away again (avalon_map).
+    avalon_map.controls(avalon_cslmap.options);
   
     avalon_cslmap.gmap = new google.maps.Map(map_div_id, avalon_cslmap.options);
+    //v0.0.27 Part 4c. The bubble's rules, once the map exists.
+    avalon_map.attach(avalon_cslmap);
   
     google.maps.event.addListener(
       avalon_cslmap.gmap,
@@ -1454,32 +1459,727 @@
     // });
   }
   function enable_on_mouse_hover_for_markers() {
-    // Delegated so the handler survives SLP replacing the results markup on
-    // every search. Namespaced and cleared first: without the .off() these
-    // accumulate on document, one generation per search, and all of them fire.
-    jQuery(document).off("mouseenter.avalonHover");
-    for (let i in avalon_cslmap.markers) {
-      let marker = avalon_cslmap.markers[i];
-      marker.__gmarker.addListener("mouseover", function () {
-        avalon_cslmap.handle_location_result_click({
-          data: {
-            info: markers_list_natural[i],
-            marker: marker,
-          },
-        });
-      });
-      //Also add on mouse hover for the sidebar list
-      jQuery(document).on(
-        "mouseenter.avalonHover",
-        "#slp_results_wrapper_" + markers_list_natural[i].id,
-        {
-          info: markers_list_natural[i],
-          marker: marker,
-        },
-        avalon_cslmap.handle_location_result_click
-      );
-    }
+    //v0.0.27 Part 4c. The hover rules, the hovered pin and the focus rules
+    //live in avalon_map below; this binds them to the markers of the
+    //search that has just been drawn. The delegated card handlers are bound
+    //once, by avalon_map.attach(), and survive SLP replacing the results
+    //markup on every search.
+    avalon_map.bind(avalon_cslmap, markers_list_natural);
   }
+
+  /* ==================================================================
+   * v0.0.27 Part 4c. The dealer bubble on the map: how it opens and
+   * closes, where focus goes, the hovered pin, and the map's controls.
+   *
+   * Asked for on 2026-10-04 and settled on 2026-10-05; the owner's words
+   * are in the rev46 addendum. The five rules, as agreed:
+   *
+   *   1. Leaving the pin or the bubble closes it after 0.3 s, unless the
+   *      pointer has moved onto the other.
+   *   2. A click on a pin, a card or anything inside the bubble keeps it
+   *      open until another pin is chosen, Esc is pressed, or the map is
+   *      clicked - so opening the hours, which moves the map, cannot
+   *      close it.
+   *   3. Hovering a card opens its bubble, and leaving the card closes it
+   *      the same way.
+   *   4. On a touch screen a tap opens the bubble and it stays: a tap is a
+   *      click.
+   *   5. It never closes on its own while keyboard focus is inside it -
+   *      and focus moving into it keeps it, as a click inside does.
+   *
+   * While one bubble is kept open, hovering another pin or card lights that
+   * pin and opens nothing: the kept bubble was chosen.
+   *
+   * OPENING. SLP's show_map_bubble() (slp_core.js 1499-1517) is replaced by
+   * show() below, with the same contract - the map_options filter, then
+   * setContent(createMarkerContent()) and open() - and three changes:
+   *
+   *   focus   Google is told shouldFocus: false. A bubble opened by a click,
+   *           a tap or a key then moves focus to its Contact Dealer button
+   *           (Get Directions when it has none), without scrolling the page,
+   *           once that click is done - after the page's own handlers for
+   *           it have run; a bubble opened by hovering takes no focus at
+   *           all. Google's own guess focused the first link, the phone
+   *           (screenshot 4770). Focus stays put when by then it has gone
+   *           somewhere else: into the Contact Dealer form, which main.js
+   *           opens on that same click when the choice was a card's own
+   *           Contact Dealer button, or to anything off the map the visitor
+   *           has moved on to. When the bubble closes and focus went with
+   *           it, focus returns to where it was - the pin a keyboard opened
+   *           it from, or wherever it came into the bubble from.
+   *   name    the InfoWindow is a dialog named for the dealer (ariaLabel)
+   *   phones  at Elementor's mobile breakpoint the bubble is at least the
+   *           map's width less 24 px, and never more than 376 px, the
+   *           theme's own width. Google reads minWidth only as a bubble
+   *           opens, so a change is close(), setOptions(), open(), as its
+   *           reference says - on the next bubble, and on the open one
+   *           0.2 s after the window stops resizing (a phone turned):
+   *           the same dealer, chosen or not as before, and focus, if it
+   *           was in the bubble, back on its Contact Dealer button. Not
+   *           while the Contact Dealer form is open over the page: once it
+   *           has closed. 767 px is Elementor's default and Aura's; Part
+   *           4's hours fold follows a site that moves it, this does not -
+   *           check before Tahoe or Avalon take Part 4c.
+   *
+   * FULL SCREEN. Contact Dealer in a bubble on a map shown full screen
+   * leaves full screen first, on the same click: its form opens over the
+   * page (main.js, #slp_bubble_website .storelocatorlink), which full
+   * screen hides. Google shows no full-screen control on iOS.
+   *
+   * Every click on a pin or a card reaches show() through SLP's own
+   * handlers; only the hover handlers here say otherwise, through st.next.
+   * So anything that is not a hover is a choice.
+   *
+   * THE HOVERED PIN. A pin under the pointer, or whose bubble is open,
+   * shows the hover icon - slplus.options.avalon_map_hover_icon, set by
+   * slp_avalon - and sits above the other pins. Without the option it is
+   * only raised.
+   *
+   * THE CONTROLS. As on a store page's map (avalon_map_location): zoom, Map
+   * and Satellite, Street View, full screen, and no camera control. Set
+   * after SLP's map_options filter, so SLP Experience's
+   * map_options_mapTypeControl ("0" on Aura) no longer hides Map and
+   * Satellite.
+   *
+   * ICONS ON PHONES. fa() puts .avalon-fa on <html> once Font Awesome 5's
+   * solid face has loaded, on the locator's page only; avalon-hours.css
+   * draws the labels as icons only under it, so without the font the words
+   * stay.
+   * ================================================================== */
+  var avalon_map = (function () {
+    var CLOSE_MS = 300;
+    var RESIZE_MS = 200;
+    var PHONE = "(max-width: 767px)";
+    var WIDEST = 376;
+    var MARGIN = 24;
+
+    var st = {
+      cm: null,           //SLP's map object, cslmap
+      byId: {},           //location id -> { id, marker, info, lit }
+      current: null,      //the entry whose bubble is open
+      open: false,
+      pinned: false,      //chosen, by a click, a tap or a key
+      next: null,         //"hover" for the next show() only
+      timer: 0,           //the pending close
+      rs: 0,              //the pending look at the width, after a resize
+      overMarker: null,   //the location id of the pin under the pointer
+      overCard: null,     //the location id of the card under the pointer
+      overBubble: false,
+      minWidth: 0,        //the minWidth the InfoWindow was last given
+      quiet: false,       //closing only to reopen at another width
+      wantFocus: false,   //move focus in once the content is in the page
+      from: null,         //where focus was when the bubble was chosen
+      back: null,         //where focus was before it moved in
+      icon: null,         //the hover icon, resolved; "" for none
+      fa: false
+    };
+
+    function has_class(n, name) {
+      return (" " + n.className + " ").indexOf(" " + name + " ") >= 0;
+    }
+
+    //Inside an InfoWindow - the locator has one, SLP's.
+    function inside(el) {
+      for (var n = el; n && n.nodeType === 1; n = n.parentNode) {
+        if (has_class(n, "gm-style-iw-c")) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function bubble() {
+      return document.querySelector("#map .slp_info_bubble");
+    }
+
+    function container() {
+      for (var n = bubble(); n && n.nodeType === 1; n = n.parentNode) {
+        if (has_class(n, "gm-style-iw-c")) {
+          return n;
+        }
+      }
+      return null;
+    }
+
+    function controls(o) {
+      if (o && typeof o === "object") {
+        o.cameraControl = false;
+        o.zoomControl = true;
+        o.mapTypeControl = true;
+        o.streetViewControl = true;
+        o.fullscreenControl = true;
+      }
+      return o;
+    }
+
+    function hover_icon() {
+      if (st.icon === null) {
+        var v = "";
+        try {
+          v = String((slplus.options && slplus.options.avalon_map_hover_icon) || "");
+        } catch (x) {
+          v = "";
+        }
+        if (v) {
+          //A path from the site's root, resolved against the page.
+          var a = document.createElement("a");
+          a.href = v;
+          v = a.href;
+        }
+        st.icon = v;
+      }
+      return st.icon;
+    }
+
+    function hovered(e) {
+      return st.overMarker === e.id || st.overCard === e.id;
+    }
+
+    //A pin lit: the hover icon, above the other pins; unlit: as SLP drew it.
+    function lit(e, on) {
+      var g = e && e.marker && e.marker.__gmarker;
+      if (!g || !!e.lit === !!on) {
+        return;
+      }
+      var url = hover_icon();
+      if (on) {
+        e.icon = g.getIcon();
+        e.z = g.getZIndex();
+        if (url) {
+          g.setIcon(url);
+        }
+        g.setZIndex((google.maps.Marker.MAX_ZINDEX || 1000000) + 1);
+      } else {
+        if (url) {
+          g.setIcon(e.icon);
+        }
+        g.setZIndex(e.z);
+      }
+      e.lit = !!on;
+    }
+
+    function cancel() {
+      if (st.timer) {
+        clearTimeout(st.timer);
+        st.timer = 0;
+      }
+    }
+
+    //Rules 1, 3 and 5: close a bubble that was not chosen, unless the
+    //pointer is back on it, its pin or its card, or focus is inside it.
+    function later() {
+      if (st.pinned || !st.open) {
+        return;
+      }
+      cancel();
+      st.timer = setTimeout(function () {
+        st.timer = 0;
+        if (st.pinned || !st.open || st.overBubble || (st.current && hovered(st.current)) ||
+            inside(document.activeElement)) {
+          return;
+        }
+        close();
+      }, CLOSE_MS);
+    }
+
+    function min_width(cm) {
+      if (!window.matchMedia || !window.matchMedia(PHONE).matches) {
+        return 0;
+      }
+      var div = cm.gmap && typeof cm.gmap.getDiv === "function" ? cm.gmap.getDiv() : null;
+      var w = div ? div.clientWidth : 0;
+      return w > MARGIN ? Math.min(WIDEST, w - MARGIN) : 0;
+    }
+
+    //The dealer's name as text: SLP's marker carries it esc_attr()'d.
+    function name_of(info) {
+      return String((info && info.name) || "")
+        .replace(/&(amp|lt|gt|quot|#0?39);/g, function (m, k) {
+          return k === "amp" ? "&" : k === "lt" ? "<" : k === "gt" ? ">" : k === "quot" ? "\"" : "'";
+        })
+        .replace(/\s+/g, " ")
+        .replace(/^ | $/g, "");
+    }
+
+    function entry(info, marker) {
+      for (var id in st.byId) {
+        if (st.byId.hasOwnProperty(id) && st.byId[id].marker === marker) {
+          return st.byId[id];
+        }
+      }
+      var e = { id: String(info && info.id !== undefined ? info.id : ""), marker: marker, info: info, lit: false };
+      if (e.id !== "") {
+        st.byId[e.id] = e;
+      }
+      return e;
+    }
+
+    //On the map: in the bubble, on a pin, the map itself - where a click on
+    //a pin may leave focus. Not somewhere else.
+    function on_map(el) {
+      var g = st.cm && st.cm.gmap;
+      var div = g && typeof g.getDiv === "function" ? g.getDiv() : null;
+      return inside(el) || !!(div && typeof div.contains === "function" && div.contains(el));
+    }
+
+    //Focus to Contact Dealer, else Get Directions. Before Google has put
+    //this dealer's content in the page - nothing there yet, or the last
+    //dealer's still (slp_info_bubble_<id>) - there is nothing to focus:
+    //ready() comes back. Not at all when the Contact Dealer form is open, or
+    //when focus has moved on since the choice (st.from) to anything off the
+    //map.
+    function focus_in() {
+      var b = bubble();
+      if (!b || (st.current && /^slp_info_bubble_/.test(b.id || "") && b.id !== "slp_info_bubble_" + st.current.id)) {
+        return;
+      }
+      st.wantFocus = false;
+      var a = document.activeElement;
+      if (document.querySelector(".contact-dealer--pop-up.open-modal") ||
+          (a && a !== document.body && a !== st.from && !on_map(a))) {
+        return;
+      }
+      var t = b.querySelector("#slp_bubble_website a") || b.querySelector("#slp_bubble_directions a");
+      if (!t) {
+        return;
+      }
+      if (a && a !== document.body && !inside(a)) {
+        st.back = a;
+      }
+      try {
+        t.focus({ preventScroll: true });
+      } catch (x) {
+        //A button that refuses focus leaves focus where it was.
+      }
+    }
+
+    //Focus moves once the click that chose the bubble is done: after the
+    //page's own handlers for it - main.js's Contact Dealer among them - have
+    //run, so focus_in() sees the form they opened.
+    function soon() {
+      setTimeout(function () {
+        if (st.wantFocus) {
+          focus_in();
+        }
+      }, 0);
+    }
+
+    //Focus back where it came from - but only when it was lost with the
+    //bubble, never taken from wherever the visitor has put it since.
+    function restore() {
+      var back = st.back;
+      st.back = null;
+      var a = document.activeElement;
+      if (!back || (a && a !== document.body && !inside(a))) {
+        return;
+      }
+      if (document.body.contains(back)) {
+        try {
+          back.focus({ preventScroll: true });
+        } catch (x) {
+          //As above.
+        }
+      }
+    }
+
+    function clear() {
+      var e = st.current;
+      cancel();
+      st.current = null;
+      st.open = false;
+      st.pinned = false;
+      st.wantFocus = false;
+      st.from = null;
+      st.overBubble = false;
+      if (e) {
+        lit(e, hovered(e));
+      }
+      restore();
+    }
+
+    function close() {
+      cancel();
+      if (st.cm && st.open) {
+        st.cm.infowindow.close();
+      }
+      clear();
+    }
+
+    //Google's close event: Esc inside the bubble, its anchor removed, or
+    //close() above. Not the close that only reopens it at another width.
+    function closed() {
+      var iw = st.cm && st.cm.infowindow;
+      if (st.quiet || (iw && iw.isOpen === true)) {
+        return;
+      }
+      clear();
+    }
+
+    //Google's close() before the bubble reopens at another width: not the
+    //visitor's, so closed() lets it pass. Google sends focus back to where
+    //it was before the bubble opened (its guide, "Close an info window"),
+    //and focusing can scroll the page. Focus that was in the bubble, or on
+    //nothing, is let go - for focus_in() to put in the bubble reopened, or
+    //to stay on nothing; focus that was elsewhere - the search box, say -
+    //is put back there; the page is put back where it was. Says whether
+    //focus was in the bubble.
+    function reclose(iw) {
+      var a = document.activeElement;
+      var had = !!a && a !== document.body && inside(a);
+      var sx = window.pageXOffset;
+      var sy = window.pageYOffset;
+      st.quiet = true;
+      try {
+        iw.close();
+      } finally {
+        st.quiet = false;
+      }
+      var now = document.activeElement;
+      try {
+        if (had || !a || a === document.body) {
+          if (now && now !== document.body && typeof now.blur === "function") {
+            now.blur();
+          }
+        } else if (now !== a && document.body.contains(a)) {
+          a.focus({ preventScroll: true });
+        }
+        if (window.pageXOffset !== sx || window.pageYOffset !== sy) {
+          window.scrollTo(sx, sy);
+        }
+      } catch (x) {
+        //Refused: focus stays where Google put it.
+      }
+      return had;
+    }
+
+    //SLP's show_map_bubble(), replaced: see the header above.
+    function show(info, marker) {
+      var cm = st.cm || this;
+      var hover = st.next === "hover";
+      st.next = null;
+      cm.options = { show_bubble: slplus.options.hide_bubble !== "1" };
+      slp_Filter("map_options").publish(cm.options);
+      if (!cm.options.show_bubble || !marker || !marker.__gmarker) {
+        return;
+      }
+      var e = entry(info, marker);
+      var iw = cm.infowindow;
+      cancel();
+      if (!hover) {
+        st.from = document.activeElement;
+      }
+      if (!(st.open && st.current === e)) {
+        var prev = st.current;
+        var width = min_width(cm);
+        var opts = { ariaLabel: name_of(info) };
+        if (width !== st.minWidth) {
+          if (st.open) {
+            reclose(iw);
+          }
+          opts.minWidth = width;
+          st.minWidth = width;
+        }
+        iw.setOptions(opts);
+        iw.setContent(cm.createMarkerContent(info));
+        iw.open({ map: cm.gmap, anchor: marker.__gmarker, shouldFocus: false });
+        st.current = e;
+        st.open = true;
+        st.pinned = false;
+        st.overBubble = false;
+        if (prev && prev !== e) {
+          lit(prev, hovered(prev));
+        }
+        lit(e, true);
+        st.wantFocus = !hover;
+      } else if (!hover) {
+        st.wantFocus = true;
+        soon();
+      }
+      if (!hover) {
+        st.pinned = true;
+      }
+    }
+
+    //The window has stopped resizing - a phone turned, say. An open bubble
+    //whose minWidth no longer fits the map is reopened at the new one, as
+    //show() does: the same dealer, chosen or not as before. Focus that was
+    //in it - lost as Google takes the bubble out - goes back to its Contact
+    //Dealer once ready() has it in the page again. A map not laid out
+    //(0 px wide) is left alone. Under the Contact Dealer form it waits:
+    //dealer-popup-focus.js gives focus back, as the form closes, to the
+    //link that opened it, which a reopen would take out of the page - and
+    //it falls back to the search box. So it looks again until the form
+    //has closed.
+    function resized() {
+      st.rs = 0;
+      var cm = st.cm;
+      var e = st.current;
+      if (!cm || !st.open || !e || !e.marker || !e.marker.__gmarker) {
+        return;
+      }
+      var div = cm.gmap && typeof cm.gmap.getDiv === "function" ? cm.gmap.getDiv() : null;
+      if (!div || !div.clientWidth) {
+        return;
+      }
+      var width = min_width(cm);
+      if (width === st.minWidth) {
+        return;
+      }
+      if (document.querySelector(".contact-dealer--pop-up.open-modal")) {
+        st.rs = setTimeout(resized, RESIZE_MS);
+        return;
+      }
+      var iw = cm.infowindow;
+      if (reclose(iw)) {
+        st.wantFocus = true;
+      }
+      iw.setOptions({ minWidth: width });
+      st.minWidth = width;
+      iw.open({ map: cm.gmap, anchor: e.marker.__gmarker, shouldFocus: false });
+    }
+
+    //Contact Dealer - main.js's #slp_bubble_website .storelocatorlink -
+    //clicked on a map shown full screen: full screen ends first, or the form
+    //main.js opens over the page stays hidden behind it.
+    function windowed(t) {
+      var d = document;
+      var link = null;
+      var n = t;
+      if (!(d.fullscreenElement || d.webkitFullscreenElement)) {
+        return;
+      }
+      for (; n && n.nodeType === 1; n = n.parentNode) {
+        if (!link && n.tagName === "A") {
+          link = n;
+        }
+        if (n.id === "slp_bubble_website") {
+          break;
+        }
+      }
+      if (!link || !has_class(link, "storelocatorlink") || !n || n.nodeType !== 1) {
+        return;
+      }
+      try {
+        var p = d.exitFullscreen ? d.exitFullscreen() : d.webkitExitFullscreen();
+        if (p && typeof p.then === "function") {
+          p.then(null, function () {
+            //Still full screen: the form opens behind it, as before.
+          });
+        }
+      } catch (x) {
+        //As above.
+      }
+    }
+
+    //The InfoWindow's content is in the page: watch the pointer on the
+    //bubble, keep it open on any click inside it - in the capture phase,
+    //before avalon-hours.js stops the hours' own clicks - or on focus
+    //moving into it, noting where focus came in from; and move focus in if
+    //a choice opened it.
+    function ready() {
+      var c = container();
+      if (c && !c.avalonMap) {
+        c.avalonMap = true;
+        c.addEventListener("mouseenter", function () {
+          st.overBubble = true;
+          cancel();
+        }, false);
+        c.addEventListener("mouseleave", function () {
+          st.overBubble = false;
+          later();
+        }, false);
+        c.addEventListener("click", function (ev) {
+          if (st.open) {
+            st.pinned = true;
+            cancel();
+          }
+          windowed(ev.target);
+        }, true);
+        c.addEventListener("focusin", function (ev) {
+          var from = ev && ev.relatedTarget;
+          if (st.open) {
+            st.pinned = true;
+            cancel();
+          }
+          if (!st.back && from && from.nodeType === 1 && from !== document.body && !inside(from)) {
+            st.back = from;
+          }
+        }, false);
+      }
+      if (st.wantFocus) {
+        soon();
+      }
+    }
+
+    function enter(e, kind) {
+      if (!e) {
+        return;
+      }
+      if (kind === "card") {
+        st.overCard = e.id;
+      } else {
+        st.overMarker = e.id;
+      }
+      lit(e, true);
+      if (st.open && st.current === e) {
+        cancel();
+      } else if (!st.pinned) {
+        cancel();
+        st.next = "hover";
+        show(e.info, e.marker);
+      }
+    }
+
+    function leave(e, kind) {
+      if (!e) {
+        return;
+      }
+      if (kind === "card") {
+        if (st.overCard === e.id) {
+          st.overCard = null;
+        }
+      } else if (st.overMarker === e.id) {
+        st.overMarker = null;
+      }
+      if (st.open && st.current === e) {
+        later();
+      } else {
+        lit(e, hovered(e));
+      }
+    }
+
+    function card(el) {
+      var id = String((el && el.id) || "").replace(/^slp_results_wrapper_/, "");
+      return id !== "" && st.byId.hasOwnProperty(id) ? st.byId[id] : null;
+    }
+
+    //Esc closes the bubble - unless the Contact Dealer form is open over
+    //the page, whose own Esc (dealer-popup-focus.js) comes first.
+    function key(ev) {
+      if ((ev.key !== "Escape" && ev.key !== "Esc" && ev.keyCode !== 27) || !st.open || ev.defaultPrevented ||
+          document.querySelector(".contact-dealer--pop-up.open-modal")) {
+        return;
+      }
+      close();
+    }
+
+    //Once, when the map is built: SLP's bubble replaced, and the listeners
+    //that outlive every search.
+    function attach(cm) {
+      if (!cm || !cm.gmap || !cm.infowindow || st.cm === cm) {
+        return;
+      }
+      st.cm = cm;
+      cm.show_map_bubble = show;
+      google.maps.event.addListener(cm.infowindow, "domready", ready);
+      google.maps.event.addListener(cm.infowindow, "close", closed);
+      google.maps.event.addListener(cm.gmap, "click", function () {
+        close();
+      });
+      document.addEventListener("keydown", key, false);
+      if (window.addEventListener) {
+        window.addEventListener("resize", function () {
+          clearTimeout(st.rs);
+          st.rs = setTimeout(resized, RESIZE_MS);
+        }, false);
+      }
+      jQuery(document)
+        .off(".avalonMap")
+        .on("mouseenter.avalonMap", "#map_sidebar .results_wrapper", function () {
+          enter(card(this), "card");
+        })
+        .on("mouseleave.avalonMap", "#map_sidebar .results_wrapper", function () {
+          leave(card(this), "card");
+        });
+    }
+
+    function info_of(list, m, i) {
+      if (!list || !m) {
+        return null;
+      }
+      for (var j = 0; j < list.length; j++) {
+        if (list[j] && String(list[j].id) === String(m.__location_id)) {
+          return list[j];
+        }
+      }
+      return list[i] || null;
+    }
+
+    function hook(e) {
+      google.maps.event.addListener(e.marker.__gmarker, "mouseover", function () {
+        enter(e, "marker");
+      });
+      google.maps.event.addListener(e.marker.__gmarker, "mouseout", function () {
+        leave(e, "marker");
+      });
+    }
+
+    //Each search: the old bubble closed, the new pins hooked, by location
+    //id - SLP's own order only when an id is missing.
+    function bind(cm, list) {
+      attach(cm);
+      cancel();
+      if (st.open && st.cm) {
+        st.cm.infowindow.close();
+      }
+      clear();
+      st.overMarker = null;
+      st.overCard = null;
+      st.byId = {};
+      var markers = (cm && cm.markers) || [];
+      for (var i = 0; i < markers.length; i++) {
+        var m = markers[i];
+        var info = info_of(list, m, i);
+        if (!m || !m.__gmarker || !info) {
+          continue;
+        }
+        var e = { id: String(info.id), marker: m, info: info, lit: false };
+        st.byId[e.id] = e;
+        hook(e);
+      }
+      if (hover_icon() && typeof Image === "function") {
+        new Image().src = hover_icon();
+      }
+    }
+
+    //On the locator's page, once: .avalon-fa when Font Awesome's solid face
+    //loads. fonts.load() resolves with the faces that matched - none when
+    //the page has no such face, which fonts.check() would call loaded.
+    function fa() {
+      var d = document;
+      if (st.fa || !d.getElementById("map_sidebar")) {
+        return;
+      }
+      st.fa = true;
+      if (!d.fonts || typeof d.fonts.load !== "function") {
+        return;
+      }
+      try {
+        d.fonts.load('900 16px "Font Awesome 5 Free"', "\uf3c5").then(function (faces) {
+          if (faces && faces.length) {
+            d.documentElement.classList.add("avalon-fa");
+          }
+        }, function () {
+          //No icon font: the labels keep their words.
+        });
+      } catch (x) {
+        //As above.
+      }
+    }
+
+    return {
+      controls: controls,
+      attach: attach,
+      bind: bind,
+      show: show,
+      close: close,
+      fa: fa,
+      state: st
+    };
+  })();
+  jQuery(function () {
+    avalon_map.fa();
+  });
   
   function get_short_address_from_geocode(address_components) {
     let street_number = ""; //street_number

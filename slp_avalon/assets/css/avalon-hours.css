@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.css
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4b.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4c.
  *
  * Google-style opening hours on store pages, find-a-dealer result cards and
  * the map's info bubble. One stylesheet for every surface, shipped with the
@@ -37,6 +37,12 @@
  * TABLES. Hello Elementor stripes and borders every table, at specificity
  * 0-1-4 (table tbody>tr:nth-child(odd)>td). The rules below are 0-2-3 and
  * up, so they win without !important.
+ *
+ * PART 4c, at the end of the file. The address on two lines on the cards
+ * and in the bubble; on a phone, 15 px text, 20 px names and the labels as
+ * Font Awesome icons; the map's own images - the Street View Pegman - at
+ * their own sizes; a keyboard focus ring on the bubble's buttons; the
+ * Hours: line balanced where it has to wrap.
  */
 
 .avalon-hours {
@@ -261,4 +267,182 @@ a.avalon-email:focus-visible {
 
 .slp_info_bubble a.avalon-email {
   overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------- Part 4c: the address */
+
+/* Part 4c. The address on two lines under its label, on the cards and in
+   the bubble, at every width: the street, then "City, ST ZIP" (the
+   avalon_address_html field). The label and the lines are flex items, so
+   the second line starts under the first, not under the label, and a long
+   line wraps inside its own column. The gap is about one space of the
+   body font, so the address's text lines up with the phone's and the
+   email's, which follow their labels after a space. */
+.avalon-address {
+  display: flex;
+  align-items: baseline;
+  column-gap: 0.25em;
+}
+
+.avalon-address > .avalon-label {
+  flex: none;
+}
+
+.avalon-address__lines {
+  display: block;
+  min-width: 0;
+}
+
+.avalon-address__line {
+  display: block;
+}
+
+/* "Distance:" is a label too, for its icon on a phone, but keeps the
+   card's plain weight (Part 4b, choice 2). */
+.avalon-label--distance {
+  font-weight: inherit;
+}
+
+/* Hours:, its status and the caret: where the line must wrap - a 320 px
+   phone, a tablet's narrow results column - its lines are balanced, so the
+   caret never wraps alone onto a line of its own, and the longest status
+   (Closed, Opens 12:30 PM Wed) never runs past the card's edge. Where it
+   fits, one line as before. Measured 2026-10-05 in Chromium, 128 status
+   shapes at 17 widths from 320 to 1024 px, on cards and in the bubble: the
+   caret alone 0 times, past the edge 0 times. Wrapping as before, the
+   caret stood alone after up to 39 of the 128 on one 860 px card; held to
+   one line (nowrap), the longest ran 71 px past a 780 px tablet's card. A
+   browser without text-wrap: balance (Safari before 17.5) wraps as
+   before. */
+.avalon-hours--card .avalon-hours__summary {
+  text-wrap: balance;
+}
+
+/* ----------------------------------------------- Part 4c: the map itself */
+
+/* Part 4c. Google's images inside the locator's map at their own sizes.
+   Elementor's .elementor img { max-width: 100% } (0-1-1) reaches every
+   image in the map. SLP's inline div#map img { max-width: none } used to
+   answer it, until slp_avalon.js removed that stylesheet with SLP's other
+   inline rules, and the Street View control's Pegman has measured 0 px
+   wide since (Aura DEV, 2026-10-05; 30 px on a store page's map). This is
+   1-1-1. An image in the bubble's content keeps the bubble's width. */
+#map .gm-style img {
+  max-width: none;
+}
+
+#map .gm-style .slp_info_bubble img {
+  max-width: 100%;
+}
+
+/* Part 4c. A keyboard focus ring on the bubble's two buttons. The theme
+   takes the outline off their :focus (style.css: #slp_bubble_website
+   a:focus, 1-1-1); this is 1-2-1, on :focus-visible only, so a pointer
+   click draws no ring. White, on the black bubble. */
+.slp_info_bubble #slp_bubble_directions a:focus-visible,
+.slp_info_bubble #slp_bubble_website a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------ Part 4c: phones, portrait */
+
+/* At Elementor's mobile breakpoint the card's and the bubble's text is
+   15 px and the dealer's name 20 px. slp_avalon.js widens the bubble there
+   to the map's width less 24 px, and at 15 px every one of Aura's 313
+   addresses fits its two lines from 320 px up, on the cards and in the
+   bubble, and every one of its 97 emails its one line from 375 px up
+   (measured 2026-10-05, icons and words). The theme sets 16 px and 24 px
+   at 0-4-0 and 1-0-0; these are 1-2-0 and 1-1-0.
+
+   767 px is Elementor's default mobile breakpoint, and Aura's: Part 4's
+   hours fold follows a site that moves it (avalon_hours_breakpoint());
+   Part 4c's two 767 px blocks here, and slp_avalon.js's, do not. Check the
+   breakpoint before Tahoe or Avalon take Part 4c. */
+@media (max-width: 767px) {
+  #map_sidebar .results_wrapper .location_distance,
+  #map_sidebar .results_wrapper .sl_contact__info,
+  .slp_info_bubble .sl_popup_contact_info {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  #map_sidebar .results_wrapper .store_locator_name,
+  .slp_info_bubble #slp_bubble_name {
+    font-size: 20px;
+    line-height: 1.2;
+  }
+}
+
+/* Part 4c. Under 375 px the email address in the bubble is 14 px; its
+   label, icon or word, stays as the others. At 15 px on a 360 px phone
+   one of Aura's 97 emails wraps with the icons and five with the words;
+   at 14 px none do. At 320 px six still wrap, and break inside the
+   address (Part 4b) rather than being cut. Measured 2026-10-05. 1-2-1:
+   the link sets its own size, under the 15 px it would inherit. */
+@media (max-width: 374px) {
+  .slp_info_bubble #slp_bubble_email a.avalon-email {
+    font-size: 14px;
+  }
+}
+
+/* Part 4c. On a phone, Font Awesome icons in place of the five labels, the
+   owner's request of 2026-10-05: map-marker-alt for Address:, phone-alt
+   for Phone:, envelope for Email:, with route for Distance: and clock for
+   Hours:. Only under .avalon-fa, which slp_avalon.js puts on <html> once
+   the page's own Font Awesome 5 (Elementor's, solid) has loaded; without
+   it the words stay. The word stays in the page at font-size 0, for screen
+   readers; the icon is generated content with empty alternative text
+   (/ ""), and a browser that does not know that syntax drops the second
+   content declaration and keeps the first. */
+@media (max-width: 767px) {
+  .avalon-fa .avalon-label--distance,
+  .avalon-fa .avalon-label--address,
+  .avalon-fa .avalon-label--phone,
+  .avalon-fa .avalon-label--email,
+  .avalon-fa .avalon-label--hours {
+    display: inline-block;
+    width: 24px;
+    font-size: 0;
+    vertical-align: baseline;
+  }
+
+  .avalon-fa .avalon-label--distance::before,
+  .avalon-fa .avalon-label--address::before,
+  .avalon-fa .avalon-label--phone::before,
+  .avalon-fa .avalon-label--email::before,
+  .avalon-fa .avalon-label--hours::before {
+    display: inline-block;
+    width: 24px;
+    color: var(--e-global-color-primary, var(--primary-color, #e7167c));
+    font: 900 15px/1 "Font Awesome 5 Free";
+    text-align: center;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .avalon-fa .avalon-label--distance::before {
+    content: "\f4d7";
+    content: "\f4d7" / "";
+  }
+
+  .avalon-fa .avalon-label--address::before {
+    content: "\f3c5";
+    content: "\f3c5" / "";
+  }
+
+  .avalon-fa .avalon-label--phone::before {
+    content: "\f879";
+    content: "\f879" / "";
+  }
+
+  .avalon-fa .avalon-label--email::before {
+    content: "\f0e0";
+    content: "\f0e0" / "";
+  }
+
+  .avalon-fa .avalon-label--hours::before {
+    content: "\f017";
+    content: "\f017" / "";
+  }
 }
