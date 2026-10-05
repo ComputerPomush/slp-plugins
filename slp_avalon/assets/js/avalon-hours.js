@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.js
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4b.
  *
  * Google-style opening hours on store pages and find-a-dealer result cards.
  *
@@ -22,8 +22,9 @@
  * false at fetch time, up to 28 days earlier.
  *
  * No dependencies. Works on whatever [data-avalon-hours] blocks are in the
- * page when it starts (the store page) and on those SLP inserts into
- * #map_sidebar after each search (the result cards). Recomputes on every
+ * page when it starts (the store page), on those SLP inserts into
+ * #map_sidebar after each search (the result cards), and on the one a map
+ * pin's info bubble brings into #map (Part 4b). Recomputes on every
  * minute boundary while the page stays open, and at once when the page is
  * shown again, so "Closes soon" turns into "Closed" on time. Writes to the
  * page only when the day or the words change.
@@ -336,6 +337,60 @@
     }
   }
 
+  /**
+   * Part 4b. Whether a batch of DOM changes brought in an hours block.
+   * Google redraws map tiles inside #map all the time; only a batch that
+   * added an hours block - the info bubble opening - is worth a scan.
+   */
+  function added(records) {
+    for (var i = 0; records && i < records.length; i++) {
+      var nodes = records[i].addedNodes;
+      for (var j = 0; nodes && j < nodes.length; j++) {
+        var n = nodes[j];
+        if (n && n.nodeType === 1 &&
+            (n.hasAttribute("data-avalon-hours") || n.querySelector("[data-avalon-hours]"))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** `el` or its nearest ancestor carrying class `name`, or null. */
+  function up(el, name) {
+    for (var n = el; n && n.nodeType === 1; n = n.parentNode) {
+      if ((" " + n.className + " ").indexOf(" " + name + " ") >= 0) {
+        return n;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Part 4b. An hours block's week opened inside the map's info bubble.
+   * Google pans a bubble into view when it opens, not when its content
+   * grows, and the bubble grows upward from its pin: the opened week can
+   * reach past the map's top edge. Pan the map down by that much and 8 px
+   * more. Only on opening, only for an hours block in a bubble, and only
+   * when SLP's map is there to pan (cslmap.gmap, Google's panBy).
+   */
+  function lift(e) {
+    var d = e && e.target;
+    if (!d || d.open !== true || !up(d, "avalon-hours")) {
+      return;
+    }
+    var iw = up(d, "gm-style-iw-c");
+    var box = iw ? up(iw, "gm-style") : null;
+    var map = root.cslmap && root.cslmap.gmap;
+    if (!box || !map || typeof map.panBy !== "function") {
+      return;
+    }
+    var gap = iw.getBoundingClientRect().top - box.getBoundingClientRect().top - 8;
+    if (gap < 0) {
+      map.panBy(0, Math.floor(gap));
+    }
+  }
+
   function boot() {
     scan(doc);
     var side = doc.getElementById("map_sidebar");
@@ -352,6 +407,21 @@
         /* SLP absent or changed: cards keep their week, without a status. */
       }
     }
+    var map = doc.getElementById("map");
+    if (map && root.MutationObserver) {
+      new root.MutationObserver(function (records) {
+        if (added(records)) {
+          scan(map);
+        }
+      }).observe(map, { childList: true, subtree: true });
+    }
+    doc.addEventListener("toggle", function (e) {
+      try {
+        lift(e);
+      } catch (x) {
+        /* The week stays open; the map just does not move. */
+      }
+    }, true);
     if (root.addEventListener) {
       root.addEventListener("pageshow", wake, false);
     }
@@ -369,7 +439,9 @@
     status: status,
     words: words,
     enhance: enhance,
-    scan: scan
+    scan: scan,
+    added: added,
+    lift: lift
   };
 
   if (doc.readyState === "loading") {

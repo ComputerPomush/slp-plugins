@@ -360,6 +360,20 @@ if (!class_exists('SLP_Avalon')){
             add_filter('rocket_delay_js_exclusions', array('SLP_Avalon','avalon_rocket_delay_exclusions'));
             add_filter('rocket_rucss_safelist', array('SLP_Avalon','avalon_rocket_rucss_safelist'));
             //
+            // v0.0.27 Part 4b. The info bubble shows what the card shows.
+            //
+            // The Email: field onto every marker at 25, after Part 4's
+            // labels at 20. The bubble layout on slp_js_options at 100: SLP
+            // puts its options in at 10 and SLP Experience merges its stored
+            // settings over them at 90, so whichever bubble layout won is the
+            // one given the fields. Same priority as Part 4's results-layout
+            // callback, registered after it; the two touch different keys.
+            // The bubble's selectors onto WP Rocket's safelist, beside Part
+            // 4's; a no-op where WP Rocket is not installed.
+            add_filter('slp_results_marker_data', array(self::$instance,'avalon_marker_email'), 25, 1);
+            add_filter('slp_js_options', array(self::$instance,'avalon_js_options_bubble'), 100, 1);
+            add_filter('rocket_rucss_safelist', array('SLP_Avalon','avalon_rocket_rucss_safelist_bubble'));
+            //
             // WP-CLI, inline and guarded - deliberately NOT a new file.
             // A require_once of a file that has not landed yet is fatal,
             // and Part 2 already paid that deploy-ordering tax once.
@@ -4901,6 +4915,203 @@ if (!class_exists('SLP_Avalon')){
             $list[] = '(.*).avalon-hours(.*)';
             $list[] = '(.*).avalon-label(.*)';
             $list[] = '(.*).avalon-tel(.*)';
+            return $list;
+        }
+
+        /**
+         * v0.0.27 Part 4b. The info bubble shows what the card shows.
+         *
+         * Asked for on 2026-10-04: the bubble a map pin opens on
+         * /find-a-dealer/ carries the card's lines - Distance:, Address:,
+         * Phone: as a tel: link, Hours: folded with its caret - and the
+         * dealer's email as "Email:", bold, then the address as the link.
+         *
+         * The bubble is SLP's bubblelayout run through the same
+         * replace_shortcodes() as the card, on the same marker object
+         * (slp_core.js createMarkerContent()), so Part 4's
+         * avalon_address_label, avalon_phone_html and avalon_hours_html
+         * are already on every marker. Only the email field is new.
+         *
+         * ORDER, on Aura's layout: Distance, Address, Phone, Email, Hours.
+         * The card's lines in the card's order; the email beside the
+         * phone, the other way to reach the dealer; the hours last, so
+         * opening the week moves nothing above it. Nothing else is moved:
+         * on SLP's default layout, where Directions and Website sit
+         * between the address and the phone, they stay there.
+         *
+         * The white frame Google draws round the bubble is not here: it
+         * belongs to the theme's dark bubble (style.css), and stays out of
+         * a plugin that travels to Tahoe and Avalon.
+         */
+
+        /**
+         * v0.0.27 Part 4b. The bubble's Email: field, as a marker field.
+         *
+         * Like Part 4's phone: [slp_location X] prints nothing when X is
+         * empty, so a dealer with no email shows no "Email:"; and the field
+         * is a string, as SLP's replace_shortcodes() needs (s0.277).
+         *
+         * The address comes from the raw row - the marker's 'data', the
+         * locator row both marker builders carry (s0.275) - else from the
+         * marker's own value. Only an address is_email() accepts, and with
+         * none of ? # % & / \ { } - which a mailto: URL reads as headers,
+         * a fragment or an escape, or which esc_url() strips - becomes a
+         * link. The three feeds hold 201 addresses, every one a single
+         * plain address of at most 34 characters (measured 2026-10-04);
+         * anything else keeps its text, escaped, unlinked. A no-break
+         * space counts as a space. target="_blank", as SLP's own mailto:
+         * wrap has it, so a webmail handler opens beside the map rather
+         * than over it.
+         */
+        public static function avalon_email_fields( $marker ){
+            $shown = isset( $marker['email'] )
+                     ? trim( str_replace( "\xC2\xA0", ' ',
+                             html_entity_decode( (string) $marker['email'], ENT_QUOTES, 'UTF-8' ) ) ) : '';
+            if ( '' === $shown ) {
+                return $marker;
+            }
+            $raw = ( isset( $marker['data'] ) && is_array( $marker['data'] ) && isset( $marker['data']['sl_email'] ) )
+                   ? trim( str_replace( "\xC2\xA0", ' ', (string) $marker['data']['sl_email'] ) ) : '';
+            if ( '' === $raw ) {
+                $raw = $shown;
+            }
+            $to   = ( false === strpbrk( $raw, '?#%&/\\{}' ) && is_email( $raw ) ) ? $raw : '';
+            $text = esc_html( '' !== $to ? $to : $shown );
+            if ( '' === $text ) {
+                return $marker;
+            }
+            $marker['avalon_email_html'] = '<b class="avalon-label">Email:</b> '
+                . ( '' !== $to
+                    ? '<a class="avalon-email" href="' . esc_url( 'mailto:' . $to, array( 'mailto' ) )
+                      . '" target="_blank" rel="noopener">' . $text . '</a>'
+                    : $text );
+            return $marker;
+        }
+
+        /**
+         * v0.0.27 Part 4b. The Email: field, onto every marker.
+         *
+         * On slp_results_marker_data at 25, after Part 4's labels at 20,
+         * for the reason they are there: both marker builders apply it, so
+         * the field is wherever SLP renders a bubble. No read.
+         */
+        public function avalon_marker_email( $marker ){
+            return is_array( $marker ) ? self::avalon_email_fields( $marker ) : $marker;
+        }
+
+        /**
+         * v0.0.27 Part 4b. The card's fields, into the bubble layout.
+         *
+         *   Distance:  a line before the address, the card's own markup
+         *   Address:   at the start of the address line
+         *   Phone:     SLP's label and number become the labelled tel: field
+         *   Email:     SLP's mailto: wrap becomes the labelled field, and
+         *              moves to just after the phone line
+         *   Hours:     right after the email line, else after the phone line
+         *
+         * Anchored on SLP's own span ids, which SLP's default bubble layout
+         * and Aura's both carry. Each step is skipped, not forced, when its
+         * anchor is absent, and when its own field is already there - so a
+         * layout this does not recognise is left as it was, and a second
+         * pass changes nothing. The name, the two buttons and the outer
+         * div, whose id main.js reads for Contact Dealer, are not touched.
+         *
+         * Every insertion is made by offset, never through a regex
+         * replacement string, so nothing in the layout is read as a
+         * backreference. An id is matched only as an attribute of its own
+         * (\sid=), never inside data-id=. The phone step reads no further
+         * than its own span: past nothing but SLP's label span and plain
+         * text, never a div or another span's end - a phone span with no
+         * number of its own is left alone, not merged with what follows.
+         */
+        public function avalon_bubble_layout( $layout ){
+            $layout = (string) $layout;
+            $addr   = '/<span\b[^>]*\sid="slp_bubble_address"[^>]*>/';
+            $phone  = '/<span\b[^>]*\sid="slp_bubble_phone"[^>]*>\[slp_location avalon_phone_html\]<\/span>/';
+
+            if ( false === strpos( $layout, 'avalon-bubble-distance' )
+                 && false === strpos( $layout, '[slp_location distance' )
+                 && preg_match( $addr, $layout, $m, PREG_OFFSET_CAPTURE ) ) {
+                $layout = substr_replace( $layout,
+                    '<span class="avalon-bubble-distance">Distance: [slp_location distance format="decimal1"] [slp_option distance_unit]</span>',
+                    $m[0][1], 0 );
+            }
+
+            if ( false === strpos( $layout, 'avalon_address_label' )
+                 && preg_match( $addr, $layout, $m, PREG_OFFSET_CAPTURE ) ) {
+                $layout = substr_replace( $layout, '[slp_location avalon_address_label]',
+                                          $m[0][1] + strlen( $m[0][0] ), 0 );
+            }
+
+            if ( false === strpos( $layout, 'avalon_phone_html' )
+                 && preg_match( '/(<span\b[^>]*\sid="slp_bubble_phone"[^>]*>)(?:<span\b(?![^>]*\sid="slp_bubble_)[^>]*>(?:(?!<\/?span\b)[\s\S])*<\/span>|(?!<\/?(?:span|div)\b)[\s\S])*?\[slp_location\s+phone\b[^\]]*\]\s*<\/span>/',
+                                $layout, $m, PREG_OFFSET_CAPTURE ) ) {
+                $layout = substr_replace( $layout, $m[1][0] . '[slp_location avalon_phone_html]</span>',
+                                          $m[0][1], strlen( $m[0][0] ) );
+            }
+
+            if ( false === strpos( $layout, 'avalon_email_html' )
+                 && preg_match( '/(<span\b[^>]*\sid="slp_bubble_email"[^>]*>)((?:(?!<\/?span\b)[\s\S])*)<\/span>/',
+                                $layout, $m, PREG_OFFSET_CAPTURE )
+                 && preg_match( '/\[slp_location\s+email\b/', $m[2][0] ) ) {
+                $field = $m[1][0] . '[slp_location avalon_email_html]</span>';
+                $at    = $m[0][1];
+                $len   = strlen( $m[0][0] );
+                if ( preg_match( $phone, $layout, $p, PREG_OFFSET_CAPTURE ) ) {
+                    $end = $p[0][1] + strlen( $p[0][0] );
+                    if ( $end > $at ) {
+                        $layout = substr_replace( $layout, $field, $end, 0 );
+                        $layout = substr_replace( $layout, '', $at, $len );
+                    } else {
+                        $layout = substr_replace( $layout, '', $at, $len );
+                        $layout = substr_replace( $layout, $field, $end, 0 );
+                    }
+                } else {
+                    $layout = substr_replace( $layout, $field, $at, $len );
+                }
+            }
+
+            if ( false === strpos( $layout, 'avalon_hours_html' )
+                 && ( preg_match( '/<span\b[^>]*\sid="slp_bubble_email"[^>]*>\[slp_location avalon_email_html\]<\/span>/',
+                                  $layout, $m, PREG_OFFSET_CAPTURE )
+                      || preg_match( $phone, $layout, $m, PREG_OFFSET_CAPTURE ) ) ) {
+                $layout = substr_replace( $layout, '[slp_location avalon_hours_html]',
+                                          $m[0][1] + strlen( $m[0][0] ), 0 );
+            }
+
+            return $layout;
+        }
+
+        /**
+         * v0.0.27 Part 4b. The fields, on the bubble layout the browser is given.
+         *
+         * The bubble layout reaches the browser in the script options, as
+         * slplus.options.bubblelayout. On slp_js_options at 100, after SLP
+         * Experience merges its stored settings at 90, so whichever layout
+         * won - SLP's own setting or one left in Experience's - is the one
+         * given the fields. Anything that is not a string is left alone.
+         */
+        public function avalon_js_options_bubble( $options ){
+            if ( is_array( $options ) && isset( $options['bubblelayout'] ) && is_string( $options['bubblelayout'] ) ) {
+                $options['bubblelayout'] = $this->avalon_bubble_layout( $options['bubblelayout'] );
+            }
+            return $options;
+        }
+
+        /**
+         * v0.0.27 Part 4b. WP Rocket: the bubble's selectors, beside Part 4's.
+         *
+         * A bubble exists only after a pin is clicked, so no rule for it is
+         * in the HTML that Remove Unused CSS reads. Part 4 safelists the
+         * whole stylesheet and, as a second line, its selectors; this adds
+         * the bubble's to that second line, written from the selector's
+         * start as WP Rocket 3.11.0.2 and later read them (s0.284).
+         */
+        public static function avalon_rocket_rucss_safelist_bubble( $list ){
+            $list   = is_array( $list ) ? $list : array();
+            $list[] = '(.*).avalon-email(.*)';
+            $list[] = '(.*).avalon-bubble-distance(.*)';
+            $list[] = '(.*).slp_info_bubble(.*)';
             return $list;
         }
 

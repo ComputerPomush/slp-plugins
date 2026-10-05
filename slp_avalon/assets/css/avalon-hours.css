@@ -1,26 +1,33 @@
 /*!
  * avalon-hours.css
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4b.
  *
- * Google-style opening hours on store pages and find-a-dealer result cards.
- * One stylesheet for both surfaces, shipped with the plugin so it travels to
- * Tahoe and Avalon; the child theme's store-pages.css loads only on store
- * pages and cannot reach /find-a-dealer/.
+ * Google-style opening hours on store pages, find-a-dealer result cards and
+ * the map's info bubble. One stylesheet for every surface, shipped with the
+ * plugin so it travels to Tahoe and Avalon; the child theme's store-pages.css
+ * loads only on store pages and cannot reach /find-a-dealer/.
  *
- * COLOURS are Google's dark-theme status colours, measured against Aura's
- * backgrounds (WCAG contrast, 2026-10-03):
+ * COLOURS. Open and the two "soon" lines are Google's dark-theme status
+ * colours. Closed is the site's own primary colour - Elementor's
+ * --e-global-color-primary, #E7167C on Aura - by the owner's decision of
+ * 2026-10-04, so each brand shows its own. WCAG contrast against Aura's
+ * backgrounds, measured 2026-10-04:
  *
- *                          store #000   card rest   card hover   #2a2a2a
- *   open    #81c995           10.72        8.89        8.41        7.33
- *   closed  #f28b82            8.79        7.29        6.90        6.01
- *   soon    #fcad70           11.35        9.41        8.91        7.76
+ *                     store #000   bubble #080808   card rest   card hover
+ *   open    #81c995      10.72         10.23           8.89        8.41
+ *   closed  #e7167c       4.80          4.58           3.98        3.77
+ *   soon    #fcad70      11.35         10.82           9.41        8.91
  *
  * card rest = rgba(255,255,255,.1) over #000; card hover = rgba(222,139,13,.2)
- * over #000; #2a2a2a = a worst case for the store page's background image.
- * A site on a light background overrides the three custom properties.
+ * over #000. On a card the pink is under 4.5 - the owner's choice; the word
+ * is bold. #2a2a2a, a worst case for the store page's background image,
+ * gives it 3.28. A site on a light background overrides the three custom
+ * properties.
  *
- * The brand pink is NOT used for the card's tel: link: 3.98 on a card at
- * rest and 3.77 on hover, under 4.5. The link is the text colour, underlined.
+ * LINKS. The tel: link on cards and in the bubble, and the bubble's mailto:
+ * link, are the text colour with no underline, and turn the primary colour
+ * on hover and on keyboard focus, with an outline (owner's decision,
+ * 2026-10-04; why keyboard focus, below).
  *
  * THE STORE PAGE FOLDS AT ELEMENTOR'S MOBILE BREAKPOINT, 767px here. The
  * plugin adds an override when a site has moved it. Both copies of the week
@@ -34,7 +41,7 @@
 
 .avalon-hours {
   --avalon-hours-open: #81c995;
-  --avalon-hours-closed: #f28b82;
+  --avalon-hours-closed: var(--e-global-color-primary, var(--primary-color, #e7167c));
   --avalon-hours-soon: #fcad70;
 }
 
@@ -187,16 +194,71 @@
   font-weight: 700;
 }
 
+/* The tel: and mailto: links: the text colour at rest, no underline; the
+   site's primary colour on hover and on keyboard focus. The card and bubble
+   scopes (0-2-1, 0-3-1) sit above the theme's a:hover and a:focus (0-1-1).
+
+   FOCUS-VISIBLE, NOT FOCUS. Google moves focus into an info bubble as it
+   opens, onto its first link - with the close button hidden, the phone.
+   Coloured on :focus, the phone would open pink on every click of a pin;
+   that is why SLP's old "Email" link opened pink (the theme's a:focus). A
+   pointer click on a pin does not match :focus-visible; a Tab does. */
 .sl_contact__info a.avalon-tel,
-a.avalon-tel {
+.slp_info_bubble a.avalon-tel,
+.slp_info_bubble a.avalon-email,
+a.avalon-tel,
+a.avalon-email {
   color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
 }
 
 .sl_contact__info a.avalon-tel:hover,
-.sl_contact__info a.avalon-tel:focus-visible,
+.slp_info_bubble a.avalon-tel:hover,
+.slp_info_bubble a.avalon-email:hover,
 a.avalon-tel:hover,
-a.avalon-tel:focus-visible {
-  text-decoration-thickness: 2px;
+a.avalon-email:hover {
+  color: var(--e-global-color-primary, var(--primary-color, #e7167c));
+  text-decoration: none;
+}
+
+/* A rule of its own, so a browser without :focus-visible drops only this
+   one and keeps the hover colour above. */
+.sl_contact__info a.avalon-tel:focus-visible,
+.slp_info_bubble a.avalon-tel:focus-visible,
+.slp_info_bubble a.avalon-email:focus-visible,
+a.avalon-tel:focus-visible,
+a.avalon-email:focus-visible {
+  color: var(--e-global-color-primary, var(--primary-color, #e7167c));
+  text-decoration: none;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ----------------------------------------------------------- info bubble */
+
+/* Part 4b. The bubble a map pin opens carries the card's lines, in the
+   card's order - Distance:, Address:, Phone: - then Email: and Hours:, from
+   the bubble layout slp_avalon rewrites. Each starts its own line; the
+   address keeps SLP's run of spans on one. The frame Google draws round the
+   bubble is the theme's to style (style.css), not this file's.
+
+   The card's weight, 400: Google's InfoWindow sets 300 on .gm-style-iw,
+   which the bubble's text would inherit, and on Aura Figtree is a variable
+   font whose 300 is real - the address would be lighter than the links
+   beside it and than the card. Labels, the name and the buttons set their
+   own weights. An email address has no break point, and the bubble does
+   not scroll sideways: a long one may break anywhere rather than be cut. */
+.slp_info_bubble {
+  font-weight: 400;
+}
+
+.slp_info_bubble .avalon-bubble-distance,
+.slp_info_bubble #slp_bubble_phone,
+.slp_info_bubble #slp_bubble_email {
+  display: block;
+}
+
+.slp_info_bubble a.avalon-email {
+  overflow-wrap: anywhere;
 }
