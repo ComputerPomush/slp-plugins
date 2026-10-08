@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.js
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4b.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4d.
  *
  * Google-style opening hours on store pages and find-a-dealer result cards.
  *
@@ -28,13 +28,20 @@
  * minute boundary while the page stays open, and at once when the page is
  * shown again, so "Closes soon" turns into "Closed" on time. Writes to the
  * page only when the day or the words change.
+ *
+ * Part 4d, the approved find-a-dealer design: the weekday in full ("Opens
+ * 9 AM Tuesday"); the status's last word and the caret held on one line,
+ * so the caret never starts a line alone - an element now, hidden from
+ * screen readers; and on a card and in the bubble, where Hours: has moved
+ * out of the <summary> into the label column, a click on it still opens
+ * and shuts the week.
  */
 (function (root, doc) {
   "use strict";
 
   var DAY = 1440;
   var WEEK = 10080;
-  var SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   var DOT = " \u00b7 ";
 
   /** 24-hour clock -> "9 AM", "9:30 PM", "12 PM" (noon), "12 AM" (midnight). */
@@ -170,9 +177,11 @@
   /**
    * A status -> [word, tone, rest] the way Google words it:
    *   Open \u00b7 Closes 5 PM        Closes soon \u00b7 5 PM      Open 24 hours
-   *   Closed \u00b7 Opens 9 AM       Closed \u00b7 Opens 10 AM Sun    Opens soon \u00b7 9 AM
-   * The weekday is added to an opening that is not later today, and to a
-   * closing a day or more away. Tone is open, closed or soon.
+   *   Closed \u00b7 Opens 9 AM       Opens soon \u00b7 9 AM
+   *   Closed \u00b7 Opens 10 AM Sunday
+   * The weekday - in full from Part 4d, as the design has it - is added to
+   * an opening that is not later today, and to a closing a day or more
+   * away. Tone is open, closed or soon.
    */
   function words(st, now) {
     if (!st || !now) {
@@ -185,13 +194,13 @@
       case "allday":
         return ["Open 24 hours", "open", ""];
       case "open":
-        return ["Open", "open", DOT + "Closes " + t + (st.left >= DAY ? " " + SHORT[day] : "")];
+        return ["Open", "open", DOT + "Closes " + t + (st.left >= DAY ? " " + DAYS[day] : "")];
       case "closing":
         return ["Closes soon", "soon", DOT + t];
       case "opening":
         return ["Opens soon", "soon", DOT + t];
       default:
-        return ["Closed", "closed", DOT + "Opens " + t + (day === now.d && st.left < DAY ? "" : " " + SHORT[day])];
+        return ["Closed", "closed", DOT + "Opens " + t + (day === now.d && st.left < DAY ? "" : " " + DAYS[day])];
     }
   }
 
@@ -221,7 +230,35 @@
     }
   }
 
-  /** The status into every status slot of a block. No status, no change. */
+  /**
+   * Part 4d. A status's rest split before its last word: [what comes
+   * before it, the word], or null when the rest is empty. A time keeps
+   * its AM or PM - "5 PM" is one word here - so the line never ends
+   * "Closes 5" with "PM" and the caret under it.
+   */
+  function last(rest) {
+    var m = /^([\s\S]*?)(\S+(?: [AP]M)?)\s*$/.exec(rest || "");
+    return m ? [m[1], m[2]] : null;
+  }
+
+  /**
+   * Part 4d. The caret: drawn by avalon-hours.css, unseen by screen
+   * readers. An <i>, as the PHP writes it: SLP hides a card's empty spans.
+   */
+  function caret() {
+    var c = doc.createElement("i");
+    c.className = "avalon-hours__caret";
+    c.setAttribute("aria-hidden", "true");
+    return c;
+  }
+
+  /**
+   * The status into every status slot of a block. No status, no change.
+   * Part 4d: the last word and the caret after it in one
+   * avalon-hours__nowrap span - the weekday, "5 PM", or a status with no
+   * rest ("Open 24 hours") whole - so the caret never wraps alone. The
+   * caret is never inside the coloured word: it keeps the line's colour.
+   */
   function paint(el, w) {
     if (!w) {
       return;
@@ -235,10 +272,20 @@
       var word = doc.createElement("span");
       word.className = "avalon-hours__word avalon-hours__word--" + w[1];
       word.textContent = w[0];
-      slot.appendChild(word);
-      if (w[2]) {
-        slot.appendChild(doc.createTextNode(w[2]));
+      var held = doc.createElement("span");
+      held.className = "avalon-hours__nowrap";
+      var tail = last(w[2]);
+      if (tail) {
+        slot.appendChild(word);
+        if (tail[0]) {
+          slot.appendChild(doc.createTextNode(tail[0]));
+        }
+        held.appendChild(doc.createTextNode(tail[1]));
+      } else {
+        held.appendChild(word);
       }
+      held.appendChild(caret());
+      slot.appendChild(held);
     }
   }
 
@@ -256,6 +303,28 @@
   }
 
   /**
+   * Part 4d. On a card and in the bubble, Hours: sits in the label
+   * column, just before the block and outside the <summary> it used to
+   * be part of. A click on it still opens and shuts the week, and - like
+   * a click in the block - goes no further. Mouse and touch only: the
+   * label is hidden from screen readers, and the summary, which says
+   * "Hours:" to them, is the control a keyboard reaches.
+   */
+  function label(el) {
+    var l = el.previousElementSibling;
+    if (!l || (" " + l.className + " ").indexOf(" avalon-label--hours ") < 0) {
+      return;
+    }
+    l.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var d = el.querySelector(".avalon-hours__narrow");
+      if (d) {
+        d.open = !d.open;
+      }
+    }, false);
+  }
+
+  /**
    * One block: guard a card's clicks once, then reorder and paint - but
    * only when the day or the words differ from what the block already
    * shows, so a text selection or a screen reader's place survives the
@@ -266,6 +335,7 @@
       el.setAttribute("data-avalon-ready", "1");
       if ((" " + el.className + " ").indexOf(" avalon-hours--card ") >= 0) {
         el.addEventListener("click", keep, false);
+        label(el);
       }
     }
     var data = null;
@@ -438,6 +508,7 @@
     spans: spans,
     status: status,
     words: words,
+    last: last,
     enhance: enhance,
     scan: scan,
     added: added,

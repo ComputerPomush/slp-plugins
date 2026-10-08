@@ -1,5 +1,7 @@
 /**
  * suite-map.js - validates slp_avalon/assets/js/slp_avalon.js, v0.0.27 Part 4c.
+ * r2, v0.0.27 Part 4d: the chosen card, the bubble's fade, the placeholder;
+ * fa() gone with the icons.
  *
  * Part 4c adds to slp_avalon.js the dealer bubble's behaviour on the map, in
  * one block - avalon_map - and two edits that wire it in:
@@ -26,12 +28,24 @@
  *                and focus moving in keeps it as a click does
  *   full screen  Contact Dealer on a map shown full screen leaves it first
  *   the pin      the hover icon and raised while hovered or open
- *   fa()         .avalon-fa once Font Awesome's solid face has loaded
+ *   ring()       Part 4d: the chosen dealer's card marked .active, and no
+ *                other, from the choice until the bubble closes; a hover
+ *                marks nothing
+ *   more()       Part 4d: .is-more on the bubble's body while there is more
+ *                below - as it opens, as it scrolls, as its week opens or
+ *                shuts, after a resize
  *
  * WHAT CARRIES FORWARD BY IDENTITY. The first assertions reverse the two
  * edits and require v0.0.25's slp_avalon.js byte for byte - 95c1ab24,
  * 76,976 bytes. Everything else in the file is v0.0.25's, and test/
  * suite-core.js and test/suite-v019.js still score it 63/63 and 38/38.
+ *
+ * r2. Part 4d's eleven edits inside the block are reversed first, and the
+ * block must then be Part 4c's byte for byte - 040a111a, 25,525 bytes - so
+ * what this suite proved of Part 4c carries forward; Part 4d's placeholder
+ * edit, outside the block, is reversed with the other two. Font Awesome's
+ * fa() and its six checks went with the icons; 18 checks came for the
+ * chosen card and the fade.
  *
  * Runs the SHIPPED file in a vm context against fakes of Google Maps, the
  * page and jQuery - node alone, no npm. Timers are fake and advanced by
@@ -103,36 +117,243 @@ const crlf = (s) => s.replace(/\n/g, "\r\n");
 const MAP_EDIT = [crlf("    slp_Filter(\"map_options\").publish(avalon_cslmap.options);\n    //v0.0.27 Part 4c. The store page's controls, set after the filter so\n    //that nothing subscribed to it can take them away again (avalon_map).\n    avalon_map.controls(avalon_cslmap.options);\n  \n    avalon_cslmap.gmap = new google.maps.Map(map_div_id, avalon_cslmap.options);\n    //v0.0.27 Part 4c. The bubble's rules, once the map exists.\n    avalon_map.attach(avalon_cslmap);\n"), crlf("    slp_Filter(\"map_options\").publish(avalon_cslmap.options);\n  \n    avalon_cslmap.gmap = new google.maps.Map(map_div_id, avalon_cslmap.options);\n")];
 const HOVER_OLD = crlf("  function enable_on_mouse_hover_for_markers() {\n    // Delegated so the handler survives SLP replacing the results markup on\n    // every search. Namespaced and cleared first: without the .off() these\n    // accumulate on document, one generation per search, and all of them fire.\n    jQuery(document).off(\"mouseenter.avalonHover\");\n    for (let i in avalon_cslmap.markers) {\n      let marker = avalon_cslmap.markers[i];\n      marker.__gmarker.addListener(\"mouseover\", function () {\n        avalon_cslmap.handle_location_result_click({\n          data: {\n            info: markers_list_natural[i],\n            marker: marker,\n          },\n        });\n      });\n      //Also add on mouse hover for the sidebar list\n      jQuery(document).on(\n        \"mouseenter.avalonHover\",\n        \"#slp_results_wrapper_\" + markers_list_natural[i].id,\n        {\n          info: markers_list_natural[i],\n          marker: marker,\n        },\n        avalon_cslmap.handle_location_result_click\n      );\n    }\n  }\n");
 const BLOCK_START = "  function enable_on_mouse_hover_for_markers() {\r\n    //v0.0.27 Part 4c.";
-const BLOCK_END = "  });\r\n  \r\n  function get_short_address_from_geocode(address_components) {";
-const BLOCK_PIN = { md5: "040a111a23ad94957ea76d1019a9aeb6", len: 25525 };
+const BLOCK_END = "  })();\r\n  \r\n  function get_short_address_from_geocode(address_components) {";
+const BLOCK_PIN = { md5: "68201cb5f477826722607e97d6ffe4d4", len: 26839 };
+const P4C_BLOCK = { md5: "040a111a23ad94957ea76d1019a9aeb6", len: 25525 };
+/* Part 4d's edits, [what it is, what Part 4c had, what Part 4d wrote], in
+   the order build-v027-part4d.py makes them; the first is the placeholder,
+   outside the block. Written LF, read CRLF. */
+const P4D_EDITS = [
+  ["slp_avalon.js: a placeholder that fits the field",
+   "       //Add search placeholder\n" +
+   "      $(\"#addressInput\").attr('placeholder','Enter City, State, or Zip Code');\n",
+   "       //Add search placeholder. v0.0.27 Part 4d: short enough to show whole\n" +
+   "       //at every width - the field keeps 200 px for Find Locations above\n" +
+   "       //1024 px, and the long one was cut off on laptops.\n" +
+   "      $(\"#addressInput\").attr('placeholder','City, State, or ZIP');\n"],
+  ["slp_avalon.js: avalon_map's header - the chosen card and the fade, no icons",
+   "   * ICONS ON PHONES. fa() puts .avalon-fa on <html> once Font Awesome 5's\n" +
+   "   * solid face has loaded, on the locator's page only; avalon-hours.css\n" +
+   "   * draws the labels as icons only under it, so without the font the words\n" +
+   "   * stay.\n",
+   "   * THE CHOSEN CARD (Part 4d). The dealer whose bubble was chosen - by a\n" +
+   "   * click, a tap or a key on its pin or card, or into the bubble - has its\n" +
+   "   * card marked .active, which the theme draws as the design's ring, until\n" +
+   "   * that bubble closes. A bubble opened by hovering marks nothing. main.js\n" +
+   "   * marks a clicked card the same way.\n" +
+   "   *\n" +
+   "   * THE FADE (Part 4d). On a phone the bubble's body scrolls; while there\n" +
+   "   * is more below, avalon-hours.css fades its foot (.is-more on\n" +
+   "   * .sl_popup_contact_info): looked at as the bubble opens, as it scrolls,\n" +
+   "   * as its week opens or shuts, and after a resize.\n" +
+   "   *\n" +
+   "   * Part 4c's Font Awesome labels went with Part 4d: words on every\n" +
+   "   * screen, the owner's decision of 2026-10-07.\n"],
+  ["slp_avalon.js: no icon flag in the state",
+   "      icon: null,         //the hover icon, resolved; \"\" for none\n" +
+   "      fa: false\n" +
+   "    };\n",
+   "      icon: null          //the hover icon, resolved; \"\" for none\n" +
+   "    };\n"],
+  ["slp_avalon.js: cls(), ring() and more() after container()",
+   "    function controls(o) {\n",
+   "    //Part 4d. A class on or off by name, the others left as they are.\n" +
+   "    function cls(n, name, on) {\n" +
+   "      if (on === has_class(n, name)) {\n" +
+   "        return;\n" +
+   "      }\n" +
+   "      n.className = on ? (n.className ? n.className + \" \" : \"\") + name\n" +
+   "                       : (\" \" + n.className + \" \").replace(\" \" + name + \" \", \" \").replace(/^\\s+|\\s+$/g, \"\");\n" +
+   "    }\n" +
+   "\n" +
+   "    //Part 4d. The chosen dealer's card marked .active, and no other; with\n" +
+   "    //no dealer, none.\n" +
+   "    function ring(e) {\n" +
+   "      var id = e ? \"slp_results_wrapper_\" + e.id : \"\";\n" +
+   "      var on = document.querySelectorAll(\"#map_sidebar .results_wrapper.active\");\n" +
+   "      for (var i = 0; i < on.length; i++) {\n" +
+   "        if (on[i].id !== id) {\n" +
+   "          cls(on[i], \"active\", false);\n" +
+   "        }\n" +
+   "      }\n" +
+   "      var c = id ? document.getElementById(id) : null;\n" +
+   "      if (c) {\n" +
+   "        cls(c, \"active\", true);\n" +
+   "      }\n" +
+   "    }\n" +
+   "\n" +
+   "    //Part 4d. The fade at the foot of the bubble's body while there is\n" +
+   "    //more below it; none at the end, none where nothing scrolls.\n" +
+   "    function more() {\n" +
+   "      var b = bubble();\n" +
+   "      var s = b ? b.querySelector(\".sl_popup_contact_info\") : null;\n" +
+   "      if (s) {\n" +
+   "        cls(s, \"is-more\", s.scrollHeight - s.scrollTop - s.clientHeight > 1);\n" +
+   "      }\n" +
+   "    }\n" +
+   "\n" +
+   "    function controls(o) {\n"],
+  ["slp_avalon.js: clear() takes the ring off",
+   "      if (e) {\n" +
+   "        lit(e, hovered(e));\n" +
+   "      }\n" +
+   "      restore();\n",
+   "      if (e) {\n" +
+   "        lit(e, hovered(e));\n" +
+   "      }\n" +
+   "      ring(null);\n" +
+   "      restore();\n"],
+  ["slp_avalon.js: show() rings the chosen dealer's card",
+   "      if (!hover) {\n" +
+   "        st.pinned = true;\n" +
+   "      }\n" +
+   "    }\n",
+   "      if (!hover) {\n" +
+   "        st.pinned = true;\n" +
+   "        ring(e);\n" +
+   "      }\n" +
+   "    }\n"],
+  ["slp_avalon.js: resized() looks at the fade",
+   "    function resized() {\n" +
+   "      st.rs = 0;\n",
+   "    function resized() {\n" +
+   "      st.rs = 0;\n" +
+   "      more();\n"],
+  ["slp_avalon.js: a click into the bubble rings its card",
+   "        c.addEventListener(\"click\", function (ev) {\n" +
+   "          if (st.open) {\n" +
+   "            st.pinned = true;\n" +
+   "            cancel();\n" +
+   "          }\n",
+   "        c.addEventListener(\"click\", function (ev) {\n" +
+   "          if (st.open) {\n" +
+   "            st.pinned = true;\n" +
+   "            ring(st.current);\n" +
+   "            cancel();\n" +
+   "          }\n"],
+  ["slp_avalon.js: focus into the bubble rings its card",
+   "          var from = ev && ev.relatedTarget;\n" +
+   "          if (st.open) {\n" +
+   "            st.pinned = true;\n" +
+   "            cancel();\n" +
+   "          }\n",
+   "          var from = ev && ev.relatedTarget;\n" +
+   "          if (st.open) {\n" +
+   "            st.pinned = true;\n" +
+   "            ring(st.current);\n" +
+   "            cancel();\n" +
+   "          }\n"],
+  ["slp_avalon.js: ready() wires the fade to the new content",
+   "      if (st.wantFocus) {\n" +
+   "        soon();\n" +
+   "      }\n" +
+   "    }\n" +
+   "\n" +
+   "    function enter(e, kind) {\n",
+   "      var b = bubble();\n" +
+   "      var s = b ? b.querySelector(\".sl_popup_contact_info\") : null;\n" +
+   "      if (s && !s.avalonMore) {\n" +
+   "        s.avalonMore = true;\n" +
+   "        s.addEventListener(\"scroll\", more, false);\n" +
+   "        s.addEventListener(\"toggle\", more, true);\n" +
+   "      }\n" +
+   "      more();\n" +
+   "      setTimeout(more, 0);\n" +
+   "      if (st.wantFocus) {\n" +
+   "        soon();\n" +
+   "      }\n" +
+   "    }\n" +
+   "\n" +
+   "    function enter(e, kind) {\n"],
+  ["slp_avalon.js: fa() taken out",
+   "\n" +
+   "    //On the locator's page, once: .avalon-fa when Font Awesome's solid face\n" +
+   "    //loads. fonts.load() resolves with the faces that matched - none when\n" +
+   "    //the page has no such face, which fonts.check() would call loaded.\n" +
+   "    function fa() {\n" +
+   "      var d = document;\n" +
+   "      if (st.fa || !d.getElementById(\"map_sidebar\")) {\n" +
+   "        return;\n" +
+   "      }\n" +
+   "      st.fa = true;\n" +
+   "      if (!d.fonts || typeof d.fonts.load !== \"function\") {\n" +
+   "        return;\n" +
+   "      }\n" +
+   "      try {\n" +
+   "        d.fonts.load('900 16px \"Font Awesome 5 Free\"', \"\\uf3c5\").then(function (faces) {\n" +
+   "          if (faces && faces.length) {\n" +
+   "            d.documentElement.classList.add(\"avalon-fa\");\n" +
+   "          }\n" +
+   "        }, function () {\n" +
+   "          //No icon font: the labels keep their words.\n" +
+   "        });\n" +
+   "      } catch (x) {\n" +
+   "        //As above.\n" +
+   "      }\n" +
+   "    }\n" +
+   "\n" +
+   "    return {\n",
+   "\n" +
+   "    return {\n"],
+  ["slp_avalon.js: the block exports ring() and more(), and no fa()",
+   "      close: close,\n" +
+   "      fa: fa,\n" +
+   "      state: st\n" +
+   "    };\n" +
+   "  })();\n" +
+   "  jQuery(function () {\n" +
+   "    avalon_map.fa();\n" +
+   "  });\n",
+   "      close: close,\n" +
+   "      ring: ring,\n" +
+   "      more: more,\n" +
+   "      state: st\n" +
+   "    };\n" +
+   "  })();\n"]
+].map((e) => [e[0], crlf(e[1]), crlf(e[2])]);
+const PH_EDIT = P4D_EDITS[0];
+const BLOCK_EDITS = P4D_EDITS.slice(1);
+const md5of = (s) => crypto.createHash("md5").update(s, "latin1").digest("hex");
 
 console.log("  IDENTITY");
-section("identity", 7, () => {
+section("identity", 9, () => {
   const a = src.indexOf(BLOCK_START);
   const b = src.indexOf(BLOCK_END, a);
   check(a > 0 && b > a && src.indexOf(BLOCK_START, a + 1) < 0,
-        "the Part 4c block sits once, where enable_on_mouse_hover_for_markers() was");
-  const blk = a > 0 && b > a ? src.slice(a, b + "  });\r\n".length) : "";
-  const bmd5 = crypto.createHash("md5").update(blk, "latin1").digest("hex");
-  check(bmd5 === BLOCK_PIN.md5 && Buffer.byteLength(blk, "latin1") === BLOCK_PIN.len,
+        "the Part 4d block sits once, where enable_on_mouse_hover_for_markers() was");
+  const blk = a > 0 && b > a ? src.slice(a, b + "  })();\r\n".length) : "";
+  check(md5of(blk) === BLOCK_PIN.md5 && Buffer.byteLength(blk, "latin1") === BLOCK_PIN.len,
         "the block is the one this suite was written against (" + BLOCK_PIN.md5 + ", " + BLOCK_PIN.len + " bytes)");
+  let p4c = blk;
+  let inBlock = blk !== "";
+  for (let i = BLOCK_EDITS.length - 1; i >= 0 && inBlock; i--) {
+    if (p4c.split(BLOCK_EDITS[i][2]).length - 1 !== 1) { inBlock = false; break; }
+    p4c = p4c.replace(BLOCK_EDITS[i][2], () => BLOCK_EDITS[i][1]);
+  }
+  check(inBlock && md5of(p4c) === P4C_BLOCK.md5 && Buffer.byteLength(p4c, "latin1") === P4C_BLOCK.len,
+        "Part 4d's " + BLOCK_EDITS.length + " edits in it, each there once, reversed: Part 4c's block (040a111a, 25,525 bytes)");
   let rev = blk ? src.slice(0, a) + HOVER_OLD + src.slice(a + blk.length) : src;
+  const ph = rev.split(PH_EDIT[2]).length - 1;
+  check(ph === 1 && rev.indexOf("'City, State, or ZIP'") > 0 && rev.indexOf("'Enter City, State, or Zip Code'") < 0,
+        "the placeholder edit is present exactly once, outside the block: City, State, or ZIP");
+  if (ph === 1) {
+    rev = rev.replace(PH_EDIT[2], () => PH_EDIT[1]);
+  }
   const n = rev.split(MAP_EDIT[0]).length - 1;
   check(n === 1, "the cslmap_build_map() edit is present exactly once");
   if (n === 1) {
     rev = rev.replace(MAP_EDIT[0], () => MAP_EDIT[1]);
   }
-  const md5 = crypto.createHash("md5").update(rev, "latin1").digest("hex");
-  check(md5 === V25.md5 && Buffer.byteLength(rev, "latin1") === V25.len,
-        "the block and the edit reversed, the file IS v0.0.25's slp_avalon.js (95c1ab24, 76,976 bytes)");
+  check(md5of(rev) === V25.md5 && Buffer.byteLength(rev, "latin1") === V25.len,
+        "the block, the placeholder and the edit reversed, the file IS v0.0.25's slp_avalon.js (95c1ab24, 76,976 bytes)");
   check(/^[\x00-\x7f]*$/.test(src) && (src.match(/\r\n/g) || []).length === (src.match(/\n/g) || []).length
         && (src.match(/\r/g) || []).length === (src.match(/\n/g) || []).length,
         "pure ASCII, pure CRLF");
   const code = blk.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   check(!/\beval\(|new Function|innerHTML|\.html\(|setInterval|document\.write/.test(code),
         "the block: no eval, no Function, no innerHTML or .html(), no setInterval, no document.write");
-  check(code.indexOf("shouldFocus: false") > 0 && code.indexOf("handle_location_result_click") < 0,
-        "the block tells Google shouldFocus: false and never calls SLP's handle_location_result_click()");
+  check(code.indexOf("shouldFocus: false") > 0 && code.indexOf("handle_location_result_click") < 0 && code.indexOf("avalon-fa") < 0,
+        "the block tells Google shouldFocus: false, never calls SLP's handle_location_result_click(), and has no icon code left");
 });
 
 /* ------------------------------------------------------------ the fakes */
@@ -160,6 +381,9 @@ class El {
     return out;
   }
   querySelector(sel) {
+    if (sel === ".sl_popup_contact_info") {
+      return this.all().filter((n) => /(^| )sl_popup_contact_info( |$)/.test(n.className))[0] || null;
+    }
     const m = /^#([\w-]+) a$/.exec(sel);
     if (!m) { throw new Error("fake DOM: unsupported selector " + sel); }
     const host = this.all().filter((n) => n.id === m[1])[0];
@@ -180,7 +404,7 @@ function makeEnv(opts) {
   opts = opts || {};
   const env = { timers: [], now: 0, focusLog: [], images: [], on: [], off: [], ready: [], filters: {}, winL: {}, scrolls: [],
                 maps: [], iwLog: [], mapListeners: [], phone: !!opts.phone, mapW: opts.mapW || 1011,
-                fontsResult: opts.fontsResult, opens: 0 };
+                opens: 0, body: { scroll: 200, client: 200 } };
   /* timers */
   env.setTimeout = (fn, ms) => { const id = env.timers.length + 1; env.timers.push({ id: id, fn: fn, at: env.now + ms, done: false }); return id; };
   env.clearTimeout = (id) => { env.timers.forEach((t) => { if (t.id === id) { t.done = true; } }); };
@@ -201,8 +425,6 @@ function makeEnv(opts) {
   const body = new El("body", {}, env);
   const html = new El("html", {}, env);
   html.appendChild(body);
-  const classes = [];
-  html.classList = { add: (c) => { classes.push(c); html.className = classes.join(" "); } };
   const sidebar = new El("div", { id: "map_sidebar" }, env);
   const mapDiv = new El("div", { id: "map" }, env);
   mapDiv.clientWidth = env.mapW;
@@ -220,6 +442,12 @@ function makeEnv(opts) {
       if (sel === ".contact-dealer--pop-up.open-modal") { return env.modalOpen ? {} : null; }
       throw new Error("fake document: unsupported selector " + sel);
     },
+    querySelectorAll: (sel) => {
+      if (sel === "#map_sidebar .results_wrapper.active") {
+        return sidebar.all().filter((n) => /(^| )results_wrapper( |$)/.test(n.className) && /(^| )active( |$)/.test(n.className));
+      }
+      throw new Error("fake document: unsupported selectorAll " + sel);
+    },
     addEventListener: (t, fn) => { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
     createElement: (t) => {
       const e = new El(t, {}, env);
@@ -233,19 +461,6 @@ function makeEnv(opts) {
       return e;
     }
   };
-  if (opts.fonts !== false) {
-    doc.fonts = {
-      calls: [],
-      load: (font, text) => {
-        doc.fonts.calls.push([font, text]);
-        return {
-          then: (ok, bad) => {
-            if (env.fontsResult === "reject") { bad(new Error("x")); } else { ok(env.fontsResult); }
-          }
-        };
-      }
-    };
-  }
   env.doc = doc;
   env.html = html;
   env.mapDiv = mapDiv;
@@ -321,8 +536,15 @@ function makeEnv(opts) {
     const c = new El("div", { "class": "gm-style-iw gm-style-iw-c slp_bubble_level_3" }, env);
     const d = new El("div", { "class": "gm-style-iw-d" }, env);
     const b = new El("div", { "class": "slp_info_bubble", id: "slp_info_bubble_" + iw.content.id }, env);
+    /* The body that scrolls on a phone (Part 4d): its heights from env.body. */
+    const info = new El("div", { "class": "sl_popup_contact_info" }, env);
+    info.scrollHeight = env.body.scroll;
+    info.clientHeight = env.body.client;
+    info.scrollTop = 0;
     const tel = new El("a", { "class": "avalon-tel" }, env);
-    b.appendChild(tel);
+    info.appendChild(tel);
+    b.appendChild(info);
+    env.info = info;
     if (iw.content.directions !== false) {
       const dir = new El("span", { id: "slp_bubble_directions" }, env);
       dir.appendChild(new El("a", { "class": "storelocatorlink" }, env));
@@ -1200,29 +1422,124 @@ env.container.fire("click", { type: "click" });
 check(exits.length === 2 && st(env).open === true, "full screen, a click with no target: nothing left, nothing thrown");
 });
 
-/* --------------------------------------------------------------- fa() */
+/* ----------------------------------------------------- the chosen card */
 
-section("fa", 6, () => {
+section("chosen card", 10, () => {
 console.log("");
-console.log("  ICONS - fa()");
-let env = makeEnv({ fontsResult: [{ family: "Font Awesome 5 Free" }] });
-env.M.fa();
-check(env.html.className === "avalon-fa" && same(env.doc.fonts.calls, [['900 16px "Font Awesome 5 Free"', "\uf3c5"]]),
-      "the solid face loads: .avalon-fa on <html>, asked for with the map-marker glyph");
-env.M.fa();
-check(env.doc.fonts.calls.length === 1 && env.html.className === "avalon-fa", "  ... once only");
-env = makeEnv({ fontsResult: [] });
-env.M.fa();
-check(env.html.className === "", "no such face on the page - fonts.load() finds none: the words stay");
-env = makeEnv({ fontsResult: "reject" });
-env.M.fa();
-check(env.html.className === "", "the font fails to load: the words stay");
-env = makeEnv({ fonts: false });
-env.M.fa();
-check(env.html.className === "", "no FontFaceSet in the browser: the words stay, no throw");
-env = makeEnv({ noSidebar: true, fontsResult: [{}] });
-env.M.fa();
-check(env.html.className === "" && env.doc.fonts.calls.length === 0, "not the locator's page: Font Awesome not even asked for");
+console.log("  THE CHOSEN CARD (Part 4d) - .active on the open bubble's card, and no other");
+/* The results as SLP draws them: one card per dealer, in #map_sidebar. */
+const cards = (env) => env.cm.markers.map((m) => {
+  const c = new El("div", { "class": "results_wrapper", id: "slp_results_wrapper_" + m.__location_id }, env);
+  env.sidebar.appendChild(c);
+  return c;
+});
+const marked = (env) => env.sidebar.all().filter((n) => /(^| )active( |$)/.test(n.className)).map((n) => n.id.replace("slp_results_wrapper_", ""));
+let env = boot();
+let cs = cards(env);
+cs[0].className = "results_wrapper keep-me";
+cs[2].className = "results_wrapper active";   /* main.js marked another card on an earlier click */
+click(env, 0);
+check(same(marked(env), ["101"]) && cs[0].className === "results_wrapper keep-me active" && cs[2].className === "results_wrapper",
+      "a click on a pin: its dealer's card marked .active, the card marked before cleared, every other class kept");
+click(env, 1);
+check(same(marked(env), ["102"]), "another pin chosen: the mark moves with it");
+env = boot();
+cs = cards(env);
+over(env, 2);
+env.dom();
+check(same(marked(env), []) && cur(env) === "103", "a hover opens the bubble and marks nothing");
+env.container.fire("click", { type: "click", target: env.bubble });
+check(same(marked(env), ["103"]) && st(env).pinned === true, "a click inside the hovered bubble chooses it: its card marked");
+env = boot();
+cs = cards(env);
+over(env, 1);
+env.dom();
+env.container.fire("focusin", { type: "focusin", relatedTarget: env.doc.body });
+check(same(marked(env), ["102"]) && st(env).pinned === true, "focus moving into a hovered bubble chooses it too: its card marked");
+key(env, { key: "Escape" });
+check(same(marked(env), []) && st(env).open === false, "Esc closes it: no card marked");
+click(env, 0);
+env.trigger(env.gmap, "click");
+const afterMap = marked(env);
+click(env, 1);
+env.iw.close();
+check(same(afterMap, []) && same(marked(env), []) && st(env).open === false,
+      "a click on the map, and Google's own close of the bubble: no card marked");
+click(env, 2);
+env.M.bind(env.cm, env.list);
+check(same(marked(env), []), "a new search: the mark goes with the old bubble");
+env = boot({ phone: true, mapW: 360 });
+cs = cards(env);
+click(env, 0);
+env.dom();
+env.advance(0);
+env.mapDiv.clientWidth = 600;
+(env.winL.resize || []).forEach((fn) => fn({ type: "resize" }));
+env.advance(200);
+check(same(marked(env), ["101"]) && st(env).open === true && env.iwLog.filter((x) => x[0] === "close").length === 1,
+      "a phone turned: the bubble closed and reopened wider, and its card stays marked - that close is not the visitor's");
+env = boot();
+let threw = false;
+try {
+  click(env, 0);
+  env.dom();
+  env.container.fire("click", { type: "click", target: env.bubble });
+} catch (e) {
+  threw = true;
+}
+check(!threw && same(marked(env), []), "a dealer with no card in the list: nothing marked, nothing thrown");
+});
+
+/* -------------------------------------------------------------- the fade */
+
+section("fade", 8, () => {
+console.log("");
+console.log("  THE FADE (Part 4d) - .is-more on the bubble's body while there is more below");
+const more = (env) => /(^| )is-more( |$)/.test(env.info.className);
+let env = boot();
+env.body = { scroll: 333, client: 250 };
+click(env, 0);
+env.dom();
+check(more(env) === true && env.info.className === "sl_popup_contact_info is-more",
+      "a body with more below than it shows: marked as the bubble opens, its own class kept");
+env.info.scrollTop = 83;
+env.info.fire("scroll", { type: "scroll" });
+check(more(env) === false, "scrolled to the end: the fade goes");
+env.info.scrollTop = 82.5;
+env.info.fire("scroll", { type: "scroll" });
+check(more(env) === false, "  ... and stays gone within a pixel of the end - a phone's fractional scroll");
+env.info.scrollTop = 20;
+env.info.fire("scroll", { type: "scroll" });
+check(more(env) === true, "scrolled back up: the fade again");
+env.info.scrollTop = 0;
+env.info.scrollHeight = 250;
+env.info.fire("toggle", { type: "toggle" });
+check(more(env) === false && (env.info.listeners.toggle || []).length === 1 && env.info.listeners.toggle[0].cap === true,
+      "the week shut, the body fits again: the fade goes - toggle heard in the capture phase, since it does not bubble");
+env.trigger(env.iw, "domready");
+check((env.info.listeners.scroll || []).length === 1 && (env.info.listeners.toggle || []).length === 1,
+      "a second domready for the same content: its listeners not added twice");
+env = boot();
+env.body = { scroll: 200, client: 200 };
+click(env, 0);
+env.dom();
+const before = more(env);
+env.info.scrollHeight = 400;
+env.advance(0);
+check(before === false && more(env) === true, "a body that fits as it opens, longer once laid out: looked at again when the opening is done");
+env.info.scrollHeight = 200;
+env.mapDiv.clientWidth = 1011;
+(env.winL.resize || []).forEach((fn) => fn({ type: "resize" }));
+env.advance(200);
+let threw = false;
+try {
+  env.M.close();
+  env.M.more();
+  env.M.ring(null);
+} catch (e) {
+  threw = true;
+}
+check(more(env) === false && !threw, "after a resize the fade is looked at again; with no bubble, more() and ring() do nothing and throw nothing");
 });
 
 console.log("");

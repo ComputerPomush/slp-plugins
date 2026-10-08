@@ -389,6 +389,19 @@ if (!class_exists('SLP_Avalon')){
             add_filter('slp_js_options', array(self::$instance,'avalon_js_options_map'), 110, 1);
             add_filter('rocket_rucss_safelist', array('SLP_Avalon','avalon_rocket_rucss_safelist_map'));
             //
+            // v0.0.27 Part 4d. The approved find-a-dealer design: the bubble
+            // in three parts.
+            //
+            // The bubble layout on slp_js_options at 120, after Part 4c's
+            // callback at 110 has made the address one field: Avalon's
+            // fields wrapped for the grid, SLP's two button spans for the
+            // row, the spans' ids kept. The cards need no new layout -
+            // avalon-hours.css lays SLP's own cells out as one grid - and
+            // nothing new goes to WP Rocket: every new selector names
+            // #map_sidebar, .slp_info_bubble or .avalon-hours, safelisted
+            // already.
+            add_filter('slp_js_options', array(self::$instance,'avalon_js_options_frame'), 120, 1);
+            //
             // WP-CLI, inline and guarded - deliberately NOT a new file.
             // A require_once of a file that has not landed yet is fatal,
             // and Part 2 already paid that deploy-ordering tax once.
@@ -4489,12 +4502,19 @@ if (!class_exists('SLP_Avalon')){
          * does with scripts. The hidden copy is display:none and out of the
          * accessibility tree.
          *
-         * CARD. The <details> only, labelled "Hours:", on every width.
+         * CARD. The <details> only, on every width. From Part 4d its label
+         * stands in front of the block, in the card's label column - on
+         * screen only, aria-hidden; the summary keeps "Hours:" for screen
+         * readers (avalon-hours__sr), and a click on the label still opens
+         * the week (avalon-hours.js). Each day's hours sit in a span of
+         * their own, which on a card never breaks, so TODAY wraps under
+         * them instead (avalon-hours.css); the store page's may, as before.
          *
          * NO EMPTY <span>. SLP hides every empty span in a result as it
          * inserts it (slp_core.js 1424, s0.274), so a span this markup left
          * empty for the script to fill would stay hidden for good. Every
-         * span below carries text from the start.
+         * span below carries text from the start, and the caret - empty by
+         * nature - is an <i> (Part 4d).
          *
          * The data attribute carries the zone, its offsets and the periods
          * and nothing else; the days are already in the rows.
@@ -4508,7 +4528,7 @@ if (!class_exists('SLP_Avalon')){
             $rows = '';
             foreach ( $payload['days'] as $d ) {
                 $rows .= '<tr data-day="' . (int) $d[0] . '"><th scope="row">' . esc_html( $d[1] )
-                       . '</th><td>' . esc_html( $d[2] ) . '</td></tr>';
+                       . '</th><td><span class="avalon-hours__time">' . esc_html( $d[2] ) . '</span></td></tr>';
             }
             $table = '<table class="avalon-hours__week"><tbody>' . $rows . '</tbody></table>';
 
@@ -4531,12 +4551,14 @@ if (!class_exists('SLP_Avalon')){
             ) ) );
 
             $summary = '<summary class="avalon-hours__summary">'
-                     . ( $card ? '<b class="avalon-label avalon-label--hours">Hours:</b> ' : '' )
-                     . '<span class="avalon-hours__status">See hours</span></summary>';
+                     . ( $card ? '<span class="avalon-hours__sr">Hours: </span>' : '' )
+                     . '<span class="avalon-hours__status">See <span class="avalon-hours__nowrap">hours'
+                     . '<i class="avalon-hours__caret" aria-hidden="true"></i></span></span></summary>';
             $narrow  = '<details class="avalon-hours__narrow">' . $summary . $table . $attr . '</details>';
 
             if ( $card ) {
-                return '<div class="avalon-hours avalon-hours--card" data-avalon-hours="' . $data . '">'
+                return '<b class="avalon-label avalon-label--hours" aria-hidden="true">Hours:</b>'
+                     . '<div class="avalon-hours avalon-hours--card" data-avalon-hours="' . $data . '">'
                      . $narrow . '</div>';
             }
 
@@ -5436,19 +5458,165 @@ if (!class_exists('SLP_Avalon')){
         /**
          * v0.0.27 Part 4c. WP Rocket: the new selectors, beside Part 4's and 4b's.
          *
-         * Cards, bubbles and the .avalon-fa class all appear only after a
-         * search, a click or a script, so Remove Unused CSS never sees
-         * them; written from the selector's start as WP Rocket 3.11.0.2
-         * and later read them (s0.284). .gm-style covers the map's own
-         * images, #map_sidebar the cards' type sizes on a phone.
+         * Cards and bubbles appear only after a search or a click, so
+         * Remove Unused CSS never sees them; written from the selector's
+         * start as WP Rocket 3.11.0.2 and later read them (s0.284).
+         * .gm-style covers the map's own images, #map_sidebar the cards.
+         * Part 4d took out .avalon-fa with the icons it named.
          */
         public static function avalon_rocket_rucss_safelist_map( $list ){
             $list   = is_array( $list ) ? $list : array();
             $list[] = '(.*).avalon-address(.*)';
-            $list[] = '(.*).avalon-fa(.*)';
             $list[] = '(.*)#map_sidebar(.*)';
             $list[] = '(.*).gm-style(.*)';
             return $list;
+        }
+
+        /**
+         * v0.0.27 Part 4d. The approved find-a-dealer design.
+         *
+         * The owner's handoff of 2026-10-06 (find-a-dealer-HANDOFF.md, and
+         * the HTML it describes) and the decisions of 2026-10-07: labels as
+         * words on every screen - Part 4c's icons gone; a hovered card in the
+         * chosen card's grey, without its ring; the bubble's keyboard ring on
+         * the card's buttons; the hover and focus of every link and button
+         * otherwise as they were.
+         *
+         *   avalon-hours.css   the card's lines in one grid, the buttons side
+         *                      by side; the bubble in three parts; the hours
+         *                      as drawn - a rule, a dot, TODAY
+         *   avalon-hours.js    the weekday in full; the caret held to the
+         *                      status's last word; Hours:, moved out of the
+         *                      summary, still opens the week
+         *   slp_avalon.js      the chosen dealer's card ringed; the bubble's
+         *                      fade while there is more to scroll
+         *   here               Hours: in front of a card's hours block
+         *                      (avalon_hours_markup(), Part 4's); and the
+         *                      bubble layout below
+         *
+         * The cards need nothing here beyond that: SLP's three cells are
+         * laid out as one grid where they are. The bubble's lines are not
+         * SLP's cells but loose spans, among them SLP's own empty fields, so
+         * Avalon's are wrapped for the grid, and the two buttons for their
+         * row - wrapped, never moved or renamed: main.js opens the Contact
+         * Dealer form for #slp_bubble_website .storelocatorlink, and
+         * slp_avalon.js focuses it and leaves full screen for it.
+         */
+
+        /**
+         * v0.0.27 Part 4d. The first tag of kind $tag at offset $at, and
+         * everything it holds: the offset just past its closing tag, counted
+         * through any of its own kind nested inside; false when it does not
+         * close.
+         */
+        private static function avalon_layout_tag_end( $layout, $at, $tag ){
+            if ( ! preg_match_all( '/<' . $tag . '\b[^>]*>|<\/' . $tag . '\s*>/i', $layout, $m, PREG_OFFSET_CAPTURE, $at ) ) {
+                return false;
+            }
+            $depth = 0;
+            foreach ( $m[0] as $t ) {
+                $depth += ( '/' === $t[0][1] ) ? -1 : 1;
+                if ( 0 === $depth ) {
+                    return $t[1] + strlen( $t[0] );
+                }
+            }
+            return false;
+        }
+
+        /**
+         * v0.0.27 Part 4d. Whether a run of layout is whole: as many <span>
+         * and <div> opened as closed, never more closed than open.
+         */
+        private static function avalon_layout_whole( $run ){
+            foreach ( array( 'span', 'div' ) as $tag ) {
+                if ( ! preg_match_all( '/<' . $tag . '\b[^>]*>|<\/' . $tag . '\s*>/i', $run, $m ) ) {
+                    continue;
+                }
+                $depth = 0;
+                foreach ( $m[0] as $t ) {
+                    $depth += ( '/' === $t[1] ) ? -1 : 1;
+                    if ( $depth < 0 ) {
+                        return false;
+                    }
+                }
+                if ( 0 !== $depth ) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * v0.0.27 Part 4d. The bubble layout in three parts.
+         *
+         *   info     from Part 4b's Distance: line to Part 4's hours field,
+         *            inside SLP's sl_popup_contact_info, wrapped in
+         *            <div class="avalon-bubble__info"> - the grid; SLP's
+         *            other lines (fax, description, its own hours, image,
+         *            tags) stay after it, out of the grid
+         *   actions  SLP's Directions and Website spans, after the contact
+         *            block and side by side with nothing but white space
+         *            between, wrapped in <div class="avalon-bubble__actions">
+         *
+         * Each wrap is skipped, not forced: when its anchors are absent, out
+         * of order or outside the contact block; when what it would hold is
+         * not whole; when its wrapper is already there - so a second pass
+         * changes nothing and a layout this does not recognise, SLP's own
+         * default among them, is left as it was. Insertions by offset, never
+         * through a regex replacement string.
+         */
+        public function avalon_bubble_layout_frame( $layout ){
+            $layout = (string) $layout;
+            if ( ! preg_match( '/<div\b[^>]*\sclass="sl_popup_contact_info"[^>]*>/', $layout, $c, PREG_OFFSET_CAPTURE ) ) {
+                return $layout;
+            }
+            $open  = $c[0][1] + strlen( $c[0][0] );
+            $close = self::avalon_layout_tag_end( $layout, $c[0][1], 'div' );
+            if ( false === $close ) {
+                return $layout;
+            }
+            $inner = $close - strlen( '</div>' );
+
+            if ( false === strpos( $layout, 'avalon-bubble__info' ) ) {
+                $field = '[slp_location avalon_hours_html]';
+                $a = strpos( $layout, '<span class="avalon-bubble-distance">', $open );
+                $b = ( false !== $a ) ? strpos( $layout, $field, $a ) : false;
+                if ( false !== $b && $b + strlen( $field ) <= $inner ) {
+                    $b += strlen( $field );
+                    $run = substr( $layout, $a, $b - $a );
+                    if ( self::avalon_layout_whole( $run ) ) {
+                        $layout = substr( $layout, 0, $a ) . '<div class="avalon-bubble__info">' . $run . '</div>' . substr( $layout, $b );
+                        $close += strlen( '<div class="avalon-bubble__info"></div>' );
+                    }
+                }
+            }
+
+            if ( false === strpos( $layout, 'avalon-bubble__actions' )
+                 && preg_match( '/<span\b[^>]*\sid="slp_bubble_directions"[^>]*>/', $layout, $d, PREG_OFFSET_CAPTURE, $close ) ) {
+                $a = $d[0][1];
+                $e = self::avalon_layout_tag_end( $layout, $a, 'span' );
+                if ( false !== $e && preg_match( '/\G\s*<span\b[^>]*\sid="slp_bubble_website"[^>]*>/', $layout, $w, 0, $e ) ) {
+                    $e = self::avalon_layout_tag_end( $layout, $e + strlen( $w[0] ) - strlen( ltrim( $w[0] ) ), 'span' );
+                    if ( false !== $e ) {
+                        $layout = substr( $layout, 0, $a ) . '<div class="avalon-bubble__actions">'
+                                . substr( $layout, $a, $e - $a ) . '</div>' . substr( $layout, $e );
+                    }
+                }
+            }
+
+            return $layout;
+        }
+
+        /**
+         * v0.0.27 Part 4d. The bubble layout the browser is given, in three
+         * parts. On slp_js_options at 120, after Part 4c's callback at 110.
+         * Anything that is not a string is left alone.
+         */
+        public function avalon_js_options_frame( $options ){
+            if ( is_array( $options ) && isset( $options['bubblelayout'] ) && is_string( $options['bubblelayout'] ) ) {
+                $options['bubblelayout'] = $this->avalon_bubble_layout_frame( $options['bubblelayout'] );
+            }
+            return $options;
         }
 
         public function avalon_rest_protected_slugs(){

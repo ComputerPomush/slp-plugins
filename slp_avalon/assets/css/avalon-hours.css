@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.css
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4c.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4d.
  *
  * Google-style opening hours on store pages, find-a-dealer result cards and
  * the map's info bubble. One stylesheet for every surface, shipped with the
@@ -18,9 +18,12 @@
  *   closed  #e7167c       4.80          4.58           3.98        3.77
  *   soon    #fcad70      11.35         10.82           9.41        8.91
  *
- * card rest = rgba(255,255,255,.1) over #000; card hover = rgba(222,139,13,.2)
- * over #000. On a card the pink is under 4.5 - the owner's choice; the word
- * is bold. #2a2a2a, a worst case for the store page's background image,
+ * card rest = rgba(255,255,255,.1) over #000; card hover, and the chosen
+ * card, = rgba(255,255,255,.12) over #000 from Part 4d (the warm
+ * rgba(222,139,13,.2) before it measured the same to 0.01). On a card the
+ * pink is under 4.5 - the owner's choice; the word is bold, and Part 4d's
+ * TODAY, 11 px, is the same pink at the same 3.98 and 3.77 (4.58 in the
+ * bubble). #2a2a2a, a worst case for the store page's background image,
  * gives it 3.28. A site on a light background overrides the three custom
  * properties.
  *
@@ -38,17 +41,26 @@
  * 0-1-4 (table tbody>tr:nth-child(odd)>td). The rules below are 0-2-3 and
  * up, so they win without !important.
  *
- * PART 4c, at the end of the file. The address on two lines on the cards
- * and in the bubble; on a phone, 15 px text, 20 px names and the labels as
- * Font Awesome icons; the map's own images - the Street View Pegman - at
- * their own sizes; a keyboard focus ring on the bubble's buttons; the
- * Hours: line balanced where it has to wrap.
+ * PART 4c, after Part 4b's bubble rules. The address on two lines on the
+ * cards and in the bubble; the map's own images - the Street View Pegman -
+ * at their own sizes; a keyboard focus ring on the bubble's buttons; the
+ * Hours: line balanced where it has to wrap; under 375 px a 14 px email.
+ *
+ * PART 4d, at the end of the file. The approved find-a-dealer design: a
+ * card's lines in one grid, its buttons side by side, with the bubble's
+ * keyboard ring; the bubble in three parts - the name, a body that scrolls
+ * on a phone, the buttons; Hours: in the label column; the opened week
+ * with a rule, a dot and TODAY; 15 px text and 20 px names at 1024 px and
+ * under on the cards, at every width in the bubble. Words for the labels
+ * on every screen: Part 4c's Font Awesome icons are gone (the owner,
+ * 2026-10-07).
  */
 
 .avalon-hours {
   --avalon-hours-open: #81c995;
   --avalon-hours-closed: var(--e-global-color-primary, var(--primary-color, #e7167c));
   --avalon-hours-soon: #fcad70;
+  --avalon-hours-today: var(--e-global-color-primary, var(--primary-color, #e7167c));
 }
 
 /* ------------------------------------------------------------ status line */
@@ -114,23 +126,33 @@
 }
 
 /* The caret is drawn, not typed: a character in generated content becomes
-   part of the summary's spoken name in some screen readers. */
-.avalon-hours .avalon-hours__summary::after {
-  content: "";
+   part of the summary's spoken name in some screen readers. From Part 4d
+   an element of its own, the last thing in the status, hidden from screen
+   readers; avalon-hours.js holds it on one line with the status's last
+   word, so it never starts a line alone. 7 px, as the design draws it.
+   Only a summary shows it: the store page's wide status line has none. */
+.avalon-hours .avalon-hours__caret {
+  display: none;
+}
+
+.avalon-hours .avalon-hours__summary .avalon-hours__caret {
   display: inline-block;
-  width: 0.4em;
-  height: 0.4em;
-  margin: 0 0 0.2em 0.5em;
+  width: 7px;
+  height: 7px;
+  margin: 0 2px 2px 8px;
   border: solid currentColor;
   border-width: 0 2px 2px 0;
-  vertical-align: middle;
   transform: rotate(45deg);
   transition: transform 0.2s;
 }
 
-.avalon-hours .avalon-hours__narrow[open] > .avalon-hours__summary::after {
-  margin-bottom: -0.1em;
-  transform: rotate(-135deg);
+.avalon-hours .avalon-hours__narrow[open] > .avalon-hours__summary .avalon-hours__caret {
+  margin-bottom: -2px;
+  transform: rotate(225deg);
+}
+
+.avalon-hours .avalon-hours__summary .avalon-hours__nowrap {
+  white-space: nowrap;
 }
 
 .avalon-hours .avalon-hours__summary:focus-visible {
@@ -140,7 +162,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .avalon-hours .avalon-hours__summary::after {
+  .avalon-hours .avalon-hours__summary .avalon-hours__caret {
     transition: none;
   }
 }
@@ -347,102 +369,415 @@ a.avalon-email:focus-visible {
 
 /* ------------------------------------------ Part 4c: phones, portrait */
 
-/* At Elementor's mobile breakpoint the card's and the bubble's text is
-   15 px and the dealer's name 20 px. slp_avalon.js widens the bubble there
-   to the map's width less 24 px, and at 15 px every one of Aura's 313
-   addresses fits its two lines from 320 px up, on the cards and in the
-   bubble, and every one of its 97 emails its one line from 375 px up
-   (measured 2026-10-05, icons and words). The theme sets 16 px and 24 px
-   at 0-4-0 and 1-0-0; these are 1-2-0 and 1-1-0.
+/* Part 4c's 15 px text and 20 px names are in Part 4d's block, at the end
+   of the file: at 1024 px and under on the cards, at every width in the
+   bubble.
 
-   767 px is Elementor's default mobile breakpoint, and Aura's: Part 4's
-   hours fold follows a site that moves it (avalon_hours_breakpoint());
-   Part 4c's two 767 px blocks here, and slp_avalon.js's, do not. Check the
-   breakpoint before Tahoe or Avalon take Part 4c. */
-@media (max-width: 767px) {
-  #map_sidebar .results_wrapper .location_distance,
-  #map_sidebar .results_wrapper .sl_contact__info,
-  .slp_info_bubble .sl_popup_contact_info {
-    font-size: 15px;
-    line-height: 1.5;
-  }
-
-  #map_sidebar .results_wrapper .store_locator_name,
-  .slp_info_bubble #slp_bubble_name {
-    font-size: 20px;
-    line-height: 1.2;
-  }
-}
-
-/* Part 4c. Under 375 px the email address in the bubble is 14 px; its
-   label, icon or word, stays as the others. At 15 px on a 360 px phone
-   one of Aura's 97 emails wraps with the icons and five with the words;
-   at 14 px none do. At 320 px six still wrap, and break inside the
-   address (Part 4b) rather than being cut. Measured 2026-10-05. 1-2-1:
-   the link sets its own size, under the 15 px it would inherit. */
+   Part 4c. Under 375 px the email address in the bubble is 14 px; its
+   label stays as the others. Measured again with Part 4d's labels in a
+   column of their own, at the bubble's width on each phone (2026-10-07):
+   none of Aura's 97 emails wraps, from 320 px up; one that did would
+   break inside the address (Part 4b) rather than be cut. 1-2-1: the
+   link sets its own size, under the 15 px it would inherit. */
 @media (max-width: 374px) {
   .slp_info_bubble #slp_bubble_email a.avalon-email {
     font-size: 14px;
   }
 }
 
-/* Part 4c. On a phone, Font Awesome icons in place of the five labels, the
-   owner's request of 2026-10-05: map-marker-alt for Address:, phone-alt
-   for Phone:, envelope for Email:, with route for Distance: and clock for
-   Hours:. Only under .avalon-fa, which slp_avalon.js puts on <html> once
-   the page's own Font Awesome 5 (Elementor's, solid) has loaded; without
-   it the words stay. The word stays in the page at font-size 0, for screen
-   readers; the icon is generated content with empty alternative text
-   (/ ""), and a browser that does not know that syntax drops the second
-   content declaration and keeps the first. */
-@media (max-width: 767px) {
-  .avalon-fa .avalon-label--distance,
-  .avalon-fa .avalon-label--address,
-  .avalon-fa .avalon-label--phone,
-  .avalon-fa .avalon-label--email,
-  .avalon-fa .avalon-label--hours {
-    display: inline-block;
-    width: 24px;
-    font-size: 0;
-    vertical-align: baseline;
+/* ------------------------------------------- Part 4d: the cards, one grid */
+
+/* Part 4d. The approved find-a-dealer design (the owner's handoff of
+   2026-10-06, decisions of 2026-10-07): a card's lines in one grid - the
+   labels in a column of their own, Distance: the widest, the values beside
+   them, an address's second line under its first and an opened week under
+   its status - then the two buttons side by side at equal widths. SLP's
+   left and centre cells and the field spans step aside (display:
+   contents), so their children are the grid's items and nothing in the
+   page moves: SLP, main.js and slp_avalon.js find every class and id where
+   it was. A dealer's fax, should one have it, takes a row of its own, as
+   does SLP's own hours span among the buttons. The card's box - colour,
+   ring, corners, padding - and the buttons' colours and shapes are the
+   theme's.
+
+   Ids beat the theme's 0-4-0 and 0-5-0 card rules without !important.
+   Every selector here names #map_sidebar, .slp_info_bubble, .avalon-hours
+   or .avalon-label, which Parts 4 to 4c already put on WP Rocket's
+   safelist. */
+#map_sidebar .results_wrapper .results_entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: baseline;
+}
+
+#map_sidebar .results_entry > [id^="slp_left_cell_"],
+#map_sidebar .results_entry > .sl_contact__info,
+#map_sidebar .results_entry .location_distance,
+#map_sidebar .results_entry .slp_result_street,
+#map_sidebar .results_entry .slp_result_phone {
+  display: contents;
+}
+
+#map_sidebar .results_entry .store_locator_name {
+  grid-column: 1 / -1;
+  margin: 0 0 8px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+#map_sidebar .results_entry .slp_result_fax {
+  grid-column: 1 / -1;
+}
+
+#map_sidebar .results_entry .avalon-hours--card {
+  min-width: 0;
+}
+
+#map_sidebar .results_entry > [id^="slp_right_cell_"] {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+#map_sidebar .results_entry .slp_result_contact {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+#map_sidebar .results_entry .slp_result_contact.slp_result_directions {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+#map_sidebar .results_entry .slp_result_contact > a {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The card's two buttons get the bubble's keyboard ring (the owner,
+   2026-10-07): 2 px white, 2 px out, on :focus-visible only - a pointer
+   click draws none, and hover stays the theme's. The theme takes the
+   outline off their :focus at 0-5-1; this is 1-3-1. */
+#map_sidebar .results_wrapper .slp_result_contact a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* At 1024 px and under - a phone's sideways two columns, a tablet's -
+   and on the stacked phone layout: 15 px text, a 20 px name, the grid a
+   little tighter. With the labels as words in a column of their own, a
+   long address takes a third line on a narrow card. Of Aura's 313, on
+   the cards: 45 at 320 px, 5 at 360, 3 at 375, 1 at 390 and 414, none
+   from 430 to 667 - where Part 4c's icons gave 5, 4, 1 and 0 at 320 to
+   390; sideways, 206 at 769, 73 at 844, 10 at 932, 3 at 1024 - where
+   Part 4c's 16 px gave 244, 104, 25 and 5. Measured 2026-10-07 in
+   Chromium, with the page's own fonts. */
+@media (max-width: 1024px) {
+  #map_sidebar .results_wrapper .results_entry {
+    column-gap: 8px;
+    row-gap: 3px;
   }
 
-  .avalon-fa .avalon-label--distance::before,
-  .avalon-fa .avalon-label--address::before,
-  .avalon-fa .avalon-label--phone::before,
-  .avalon-fa .avalon-label--email::before,
-  .avalon-fa .avalon-label--hours::before {
-    display: inline-block;
-    width: 24px;
-    color: var(--e-global-color-primary, var(--primary-color, #e7167c));
-    font: 900 15px/1 "Font Awesome 5 Free";
-    text-align: center;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  #map_sidebar .results_entry .location_distance,
+  #map_sidebar .results_entry > .sl_contact__info {
+    font-size: 15px;
+    line-height: 1.5;
   }
 
-  .avalon-fa .avalon-label--distance::before {
-    content: "\f4d7";
-    content: "\f4d7" / "";
+  #map_sidebar .results_entry .store_locator_name {
+    margin-bottom: 5px;
+    font-size: 20px;
   }
 
-  .avalon-fa .avalon-label--address::before {
-    content: "\f3c5";
-    content: "\f3c5" / "";
+  #map_sidebar .results_entry > [id^="slp_right_cell_"] {
+    margin-top: 11px;
+  }
+}
+
+/* Stacked, on a screen wider than a phone - a tablet upright, a small
+   phone sideways - a card runs up to 728 px: the two buttons keep about
+   their desktop width instead of stretching to the card's. */
+@media (min-width: 576px) and (max-width: 768px) {
+  #map_sidebar .results_entry > [id^="slp_right_cell_"] {
+    max-width: 456px;
+  }
+}
+
+/* ------------------------------------- Part 4d: the hours, in the design */
+
+/* Hours: in the label column, outside the <summary> it used to sit in: on
+   screen only - the summary keeps the word for screen readers, in
+   .avalon-hours__sr - and a click on it opens and shuts the week as
+   before (avalon-hours.js). */
+.avalon-label--hours {
+  cursor: pointer;
+}
+
+.avalon-hours .avalon-hours__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The opened week on a card and in the bubble: a rule across, then the
+   days, today first (avalon-hours.js) with a dot before it and TODAY
+   after its hours, both in the primary colour; the other days indented by
+   the dot's width, so every name starts in one column. A table still -
+   its row headers are what a screen reader reads - pulled 15 px left, so
+   the dot sits in the gap and the day names line up with the status
+   above. TODAY is generated text with empty alternative text: the row
+   already says aria-current="date". The hours never break here; TODAY
+   drops under them where a card is too narrow for both. None of this
+   reaches the store page: its week is as Part 4 drew it. */
+#map_sidebar .avalon-hours--card .avalon-hours__week,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week {
+  width: calc(100% + 15px);
+  margin: 8px 0 0 -15px;
+  padding-top: 8px;
+  border-top: 1px solid var(--avalon-hours-rule, rgba(255, 255, 255, 0.15));
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr > th,
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr > td,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr > th,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr > td {
+  padding: 0 0 3px;
+  vertical-align: baseline;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr > th,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr > th {
+  width: 1%;
+  padding-right: 20px;
+  padding-left: 15px;
+  white-space: nowrap;
+}
+
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr > th {
+  padding-right: 16px;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr.is-today > th,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > th {
+  padding-left: 0;
+  font-weight: 800;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td {
+  font-weight: 800;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr.is-today > th::before,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > th::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--avalon-hours-today);
+  vertical-align: middle;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__time,
+.slp_info_bubble .avalon-hours--card .avalon-hours__time {
+  white-space: nowrap;
+}
+
+#map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after,
+.slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after {
+  content: "TODAY";
+  content: "TODAY" / "";
+  display: inline-block;
+  margin-left: 12px;
+  color: var(--avalon-hours-today);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 1024px) {
+  #map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr > th {
+    padding-right: 16px;
+  }
+}
+
+/* A phone held sideways, a tablet: the week 20 px left, as approved. */
+@media (min-width: 769px) and (max-width: 1024px) {
+  #map_sidebar .avalon-hours--card .avalon-hours__week {
+    width: calc(100% + 20px);
+    margin-left: -20px;
+  }
+}
+
+/* Narrow cards and bubbles. The card's grid and the bubble's are size
+   containers for these two rules alone; a browser without container
+   queries keeps the week as above, TODAY wrapping where it must.
+
+   Under 320 px of content - a phone upright, a phone held sideways, the
+   bubble on a phone - TODAY does not fit beside the hours, so it takes
+   the line under them, flush with them, rather than wrap with a 12 px
+   indent.
+
+   Under 250 px - the results column of a phone held sideways, 769 to
+   about 880 px wide, a 320 px phone upright, the bubble on one - the week
+   does not fit beside the labels either, so the opened week takes the
+   whole width under the Hours: line, its day names 15 px in, rather than
+   run into the padding or past the edge. Measured on Aura 2026-10-07: the
+   week needs 193 px, and has the content less 50 to 56 px beside the
+   labels. */
+#map_sidebar .results_wrapper .results_entry,
+.slp_info_bubble .avalon-bubble__info {
+  container-type: inline-size;
+}
+
+@container (max-width: 320px) {
+  #map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after,
+  .slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after {
+    display: block;
+    margin: 3px 0 2px;
+  }
+}
+
+@container (max-width: 250px) {
+  #map_sidebar .avalon-hours--card .avalon-hours__week,
+  .slp_info_bubble .avalon-hours--card .avalon-hours__week {
+    width: 100cqw;
+    margin-left: calc(100% - 100cqw);
+  }
+}
+
+/* ----------------------------------- Part 4d: the bubble, in three parts */
+
+/* The name; the dealer's lines - the card's grid - in a body that
+   scrolls on a phone, with a fade at its foot while there is more below
+   (slp_avalon.js); then the two buttons in a row of their own under the
+   body, where they stay while it scrolls. slp_avalon wraps Avalon's fields
+   in .avalon-bubble__info and SLP's two button spans in
+   .avalon-bubble__actions (slp_js_options at 120), so SLP's own lines -
+   fax, description, its hours, image, tags, all empty on Aura - stay out
+   of the grid, and the spans keep the ids main.js and slp_avalon.js read.
+   15 px text and a 20 px name at every width; a long address takes a
+   third line 105 times of Aura's 313 at 320 px, 12 at 360, 7 at 375, 4
+   at 390 and once from 414 up, where Part 4c's icons gave 13, 10, 1 and
+   1 (2026-10-07). The frame - its colour, corners, width, shadow and
+   tail - is the theme's. */
+.slp_info_bubble #slp_bubble_name {
+  display: block;
+  margin: 0;
+  padding: 16px 16px 6px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.slp_info_bubble .sl_popup_contact_info {
+  margin: 0;
+  padding: 0 12px 16px 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.slp_info_bubble .avalon-bubble__info {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: baseline;
+}
+
+.slp_info_bubble .avalon-bubble__info > .avalon-bubble-distance,
+.slp_info_bubble .avalon-bubble__info > #slp_bubble_address,
+.slp_info_bubble .avalon-bubble__info > #slp_bubble_phone,
+.slp_info_bubble .avalon-bubble__info > #slp_bubble_email {
+  display: contents;
+}
+
+.slp_info_bubble .avalon-bubble__info > .avalon-hours--card {
+  min-width: 0;
+}
+
+.slp_info_bubble .avalon-bubble__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--avalon-bubble-rule, rgba(255, 255, 255, 0.12));
+}
+
+.slp_info_bubble .avalon-bubble__actions > #slp_bubble_directions,
+.slp_info_bubble .avalon-bubble__actions > #slp_bubble_website {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
+.slp_info_bubble .avalon-bubble__actions a {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.slp_info_bubble .avalon-bubble__actions br {
+  display: none;
+}
+
+/* The fade: the bubble's black over the body's last 28 px while there is
+   more below. slp_avalon.js sets .is-more; at the end of the scroll, and
+   wherever nothing scrolls, it is not drawn. */
+.slp_info_bubble .sl_popup_contact_info::after {
+  content: "";
+  display: block;
+  position: sticky;
+  bottom: 0;
+  height: 28px;
+  margin-top: -28px;
+  background: linear-gradient(transparent, var(--avalon-bubble-bg, #080808));
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.slp_info_bubble .sl_popup_contact_info.is-more::after {
+  visibility: visible;
+}
+
+/* On a phone - upright, or sideways and short - the body is at most
+   250 px or 45% of the screen's height, and scrolls, with a thin visible
+   scrollbar; the buttons stay under it. On a larger screen the bubble
+   grows as it did. */
+@media (max-width: 767px), (max-height: 500px) {
+  .slp_info_bubble .sl_popup_contact_info {
+    max-height: min(250px, 45vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.45) transparent;
   }
 
-  .avalon-fa .avalon-label--phone::before {
-    content: "\f879";
-    content: "\f879" / "";
+  .slp_info_bubble .sl_popup_contact_info::-webkit-scrollbar {
+    width: 5px;
   }
 
-  .avalon-fa .avalon-label--email::before {
-    content: "\f0e0";
-    content: "\f0e0" / "";
+  .slp_info_bubble .sl_popup_contact_info::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.45);
+    border-radius: 3px;
   }
 
-  .avalon-fa .avalon-label--hours::before {
-    content: "\f017";
-    content: "\f017" / "";
+  .slp_info_bubble .sl_popup_contact_info::-webkit-scrollbar-track {
+    background: transparent;
   }
 }

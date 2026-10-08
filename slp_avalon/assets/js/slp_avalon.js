@@ -37,8 +37,10 @@
       $(".store_locator_single_contact p br + br").remove();
       // Comment below on 3/17/2026, was hiding input text on mobile 
       // jQuery("#addressInput").css("padding-right",jQuery("#addressSubmit").width() + 35 + "px");
-       //Add search placeholder
-      $("#addressInput").attr('placeholder','Enter City, State, or Zip Code');
+       //Add search placeholder. v0.0.27 Part 4d: short enough to show whole
+       //at every width - the field keeps 200 px for Find Locations above
+       //1024 px, and the long one was cut off on laptops.
+      $("#addressInput").attr('placeholder','City, State, or ZIP');
     });
   })(jQuery);
   function add_url_param(params, url) {
@@ -1541,10 +1543,19 @@
    * map_options_mapTypeControl ("0" on Aura) no longer hides Map and
    * Satellite.
    *
-   * ICONS ON PHONES. fa() puts .avalon-fa on <html> once Font Awesome 5's
-   * solid face has loaded, on the locator's page only; avalon-hours.css
-   * draws the labels as icons only under it, so without the font the words
-   * stay.
+   * THE CHOSEN CARD (Part 4d). The dealer whose bubble was chosen - by a
+   * click, a tap or a key on its pin or card, or into the bubble - has its
+   * card marked .active, which the theme draws as the design's ring, until
+   * that bubble closes. A bubble opened by hovering marks nothing. main.js
+   * marks a clicked card the same way.
+   *
+   * THE FADE (Part 4d). On a phone the bubble's body scrolls; while there
+   * is more below, avalon-hours.css fades its foot (.is-more on
+   * .sl_popup_contact_info): looked at as the bubble opens, as it scrolls,
+   * as its week opens or shuts, and after a resize.
+   *
+   * Part 4c's Font Awesome labels went with Part 4d: words on every
+   * screen, the owner's decision of 2026-10-07.
    * ================================================================== */
   var avalon_map = (function () {
     var CLOSE_MS = 300;
@@ -1570,8 +1581,7 @@
       wantFocus: false,   //move focus in once the content is in the page
       from: null,         //where focus was when the bubble was chosen
       back: null,         //where focus was before it moved in
-      icon: null,         //the hover icon, resolved; "" for none
-      fa: false
+      icon: null          //the hover icon, resolved; "" for none
     };
 
     function has_class(n, name) {
@@ -1599,6 +1609,41 @@
         }
       }
       return null;
+    }
+
+    //Part 4d. A class on or off by name, the others left as they are.
+    function cls(n, name, on) {
+      if (on === has_class(n, name)) {
+        return;
+      }
+      n.className = on ? (n.className ? n.className + " " : "") + name
+                       : (" " + n.className + " ").replace(" " + name + " ", " ").replace(/^\s+|\s+$/g, "");
+    }
+
+    //Part 4d. The chosen dealer's card marked .active, and no other; with
+    //no dealer, none.
+    function ring(e) {
+      var id = e ? "slp_results_wrapper_" + e.id : "";
+      var on = document.querySelectorAll("#map_sidebar .results_wrapper.active");
+      for (var i = 0; i < on.length; i++) {
+        if (on[i].id !== id) {
+          cls(on[i], "active", false);
+        }
+      }
+      var c = id ? document.getElementById(id) : null;
+      if (c) {
+        cls(c, "active", true);
+      }
+    }
+
+    //Part 4d. The fade at the foot of the bubble's body while there is
+    //more below it; none at the end, none where nothing scrolls.
+    function more() {
+      var b = bubble();
+      var s = b ? b.querySelector(".sl_popup_contact_info") : null;
+      if (s) {
+        cls(s, "is-more", s.scrollHeight - s.scrollTop - s.clientHeight > 1);
+      }
     }
 
     function controls(o) {
@@ -1794,6 +1839,7 @@
       if (e) {
         lit(e, hovered(e));
       }
+      ring(null);
       restore();
     }
 
@@ -1897,6 +1943,7 @@
       }
       if (!hover) {
         st.pinned = true;
+        ring(e);
       }
     }
 
@@ -1912,6 +1959,7 @@
     //has closed.
     function resized() {
       st.rs = 0;
+      more();
       var cm = st.cm;
       var e = st.current;
       if (!cm || !st.open || !e || !e.marker || !e.marker.__gmarker) {
@@ -1991,6 +2039,7 @@
         c.addEventListener("click", function (ev) {
           if (st.open) {
             st.pinned = true;
+            ring(st.current);
             cancel();
           }
           windowed(ev.target);
@@ -1999,6 +2048,7 @@
           var from = ev && ev.relatedTarget;
           if (st.open) {
             st.pinned = true;
+            ring(st.current);
             cancel();
           }
           if (!st.back && from && from.nodeType === 1 && from !== document.body && !inside(from)) {
@@ -2006,6 +2056,15 @@
           }
         }, false);
       }
+      var b = bubble();
+      var s = b ? b.querySelector(".sl_popup_contact_info") : null;
+      if (s && !s.avalonMore) {
+        s.avalonMore = true;
+        s.addEventListener("scroll", more, false);
+        s.addEventListener("toggle", more, true);
+      }
+      more();
+      setTimeout(more, 0);
       if (st.wantFocus) {
         soon();
       }
@@ -2142,44 +2201,17 @@
       }
     }
 
-    //On the locator's page, once: .avalon-fa when Font Awesome's solid face
-    //loads. fonts.load() resolves with the faces that matched - none when
-    //the page has no such face, which fonts.check() would call loaded.
-    function fa() {
-      var d = document;
-      if (st.fa || !d.getElementById("map_sidebar")) {
-        return;
-      }
-      st.fa = true;
-      if (!d.fonts || typeof d.fonts.load !== "function") {
-        return;
-      }
-      try {
-        d.fonts.load('900 16px "Font Awesome 5 Free"', "\uf3c5").then(function (faces) {
-          if (faces && faces.length) {
-            d.documentElement.classList.add("avalon-fa");
-          }
-        }, function () {
-          //No icon font: the labels keep their words.
-        });
-      } catch (x) {
-        //As above.
-      }
-    }
-
     return {
       controls: controls,
       attach: attach,
       bind: bind,
       show: show,
       close: close,
-      fa: fa,
+      ring: ring,
+      more: more,
       state: st
     };
   })();
-  jQuery(function () {
-    avalon_map.fa();
-  });
   
   function get_short_address_from_geocode(address_components) {
     let street_number = ""; //street_number

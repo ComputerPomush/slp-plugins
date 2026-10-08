@@ -1,5 +1,6 @@
 /**
  * suite-hours.js - validates slp_avalon/assets/js/avalon-hours.js, v0.0.27 Part 4.
+ * r2, v0.0.27 Part 4d: the weekday in full, as the approved design has it.
  *
  * Runs the SHIPPED file in a vm context, as harness.js does for slp_avalon.js:
  * the suite exercises the artefact, not a copy of its logic. No npm
@@ -15,10 +16,12 @@
  *               close, or a close equal to its open, is "open 24 hours" only
  *               when it opens Sunday 00:00, as Google sends it
  *   status()    open / closing / opening / closed / allday from the periods
- *   words()     the exact strings Google prints, middle dot included; the
+ *   words()     the strings Google prints, middle dot included; the
  *               reference case is the dealer checked against Google's own
  *               panel on a Saturday evening, "Closed · Opens 10 AM Sun"
- *               (addendum rev43 s K)
+ *               (addendum rev43 s K) - from Part 4d (r2) with the weekday
+ *               in full, "Closed · Opens 10 AM Sunday", the one change;
+ *               suite-cards.js holds Part 4d's own checks
  *   enhance()   against a small fake DOM: today first and bold, the status
  *               painted into every slot, a card's clicks kept off the card,
  *               nothing rewritten while nothing changed, one bad block kept
@@ -298,23 +301,23 @@ const tone = (periods, d, h, m) => {
   return w ? w[1] : null;
 };
 const D = " · ";
-check(say(refw, 6, 22, 0) === "Closed" + D + "Opens 10 AM Sun", "Sat 22:00 - Google's own panel: Closed · Opens 10 AM Sun");
+check(say(refw, 6, 22, 0) === "Closed" + D + "Opens 10 AM Sunday", "Sat 22:00 - the reference dealer, Google's own panel's words, the weekday in full: Closed · Opens 10 AM Sunday");
 check(tone(refw, 6, 22, 0) === "closed", "  ... in the closed tone");
 check(say(refw, 6, 10, 0) === "Open" + D + "Closes 5 PM", "Sat 10:00 - Open · Closes 5 PM");
 check(tone(refw, 6, 10, 0) === "open", "  ... in the open tone");
 check(say(refw, 6, 16, 0) === "Closes soon" + D + "5 PM", "Sat 16:00 - Closes soon · 5 PM (exactly an hour)");
 check(say(refw, 6, 15, 59) === "Open" + D + "Closes 5 PM", "Sat 15:59 - still Open (61 minutes)");
 check(tone(refw, 6, 16, 30) === "soon", "Sat 16:30 - the soon tone");
-check(say(refw, 6, 17, 0) === "Closed" + D + "Opens 10 AM Sun", "Sat 17:00 - closed at the closing minute");
+check(say(refw, 6, 17, 0) === "Closed" + D + "Opens 10 AM Sunday", "Sat 17:00 - closed at the closing minute");
 check(say(refw, 0, 9, 15) === "Opens soon" + D + "10 AM", "Sun 09:15 - Opens soon · 10 AM");
 check(say(refw, 0, 7, 0) === "Closed" + D + "Opens 10 AM", "Sun 07:00 - later today, no weekday");
-check(say(refw, 0, 16, 0) === "Closed" + D + "Opens 9 AM Mon", "Sun 16:00 - Closed · Opens 9 AM Mon");
+check(say(refw, 0, 16, 0) === "Closed" + D + "Opens 9 AM Monday", "Sun 16:00 - Closed · Opens 9 AM Monday");
 
 console.log("");
 console.log("  status() and words() - other shapes Google sends");
 const weekdays = [P(1, 9, 0, 17, 0), P(2, 9, 0, 17, 0), P(3, 9, 0, 17, 0), P(4, 9, 0, 17, 0), P(5, 9, 0, 17, 0)];
-check(say(weekdays, 6, 12, 0) === "Closed" + D + "Opens 9 AM Mon", "closed weekend (legacy sends no period): Opens 9 AM Mon");
-check(say(weekdays, 5, 18, 0) === "Closed" + D + "Opens 9 AM Mon", "Friday evening, same answer");
+check(say(weekdays, 6, 12, 0) === "Closed" + D + "Opens 9 AM Monday", "closed weekend (legacy sends no period): Opens 9 AM Monday");
+check(say(weekdays, 5, 18, 0) === "Closed" + D + "Opens 9 AM Monday", "Friday evening, same answer");
 const allday = [[[0, 0, 0]]];
 check(say(allday, 3, 3, 0) === "Open 24 hours", "one period with no close, opening Sunday 00:00: Open 24 hours");
 check(tone(allday, 3, 3, 0) === "open", "  ... in the open tone");
@@ -345,8 +348,8 @@ check(say(daily24, 3, 3, 0) === "Open 24 hours" && say(daily24, 6, 23, 30) === "
 const weekdays24 = [1, 2, 3, 4, 5].map((d) => [[d, 0, 0], [d + 1, 0, 0]]);
 check(same(H.spans(weekdays24), [[1440, 8640]]), "Monday to Friday, round the clock: one span");
 check(say(weekdays24, 5, 23, 30) === "Closes soon" + D + "12 AM", "  Fri 23:30 - Closes soon · 12 AM");
-check(say(weekdays24, 1, 12, 0) === "Open" + D + "Closes 12 AM Sat", "  Mon 12:00 - Open · Closes 12 AM Sat (a day or more away)");
-check(say(weekdays24, 6, 12, 0) === "Closed" + D + "Opens 12 AM Mon", "  Sat 12:00 - Closed · Opens 12 AM Mon");
+check(say(weekdays24, 1, 12, 0) === "Open" + D + "Closes 12 AM Saturday", "  Mon 12:00 - Open · Closes 12 AM Saturday (a day or more away)");
+check(say(weekdays24, 6, 12, 0) === "Closed" + D + "Opens 12 AM Monday", "  Sat 12:00 - Closed · Opens 12 AM Monday");
 check(say(weekdays24, 0, 23, 30) === "Opens soon" + D + "12 AM", "  Sun 23:30 - Opens soon · 12 AM");
 const touching = [[[1, 9, 0], [1, 12, 0]], [[1, 12, 0], [1, 17, 0]]];
 check(say(touching, 1, 11, 30) === "Open" + D + "Closes 5 PM", "two periods meeting at noon: Open · Closes 5 PM, not Closes soon · 12 PM");
@@ -363,9 +366,9 @@ check(same(H.spans(wrap2), [[9960, 10380]]), "a Saturday-night span that swallow
 check(say(wrap2, 6, 23, 0) === "Open" + D + "Closes 5 AM", "  Sat 23:00 - Open · Closes 5 AM, not 3 AM");
 check(same(H.spans([P(3, 9, 0, 17, 0), P(1, 9, 0, 17, 0)]), [[1980, 2460], [4860, 5340]]), "periods out of order are sorted");
 check(H.status([[[3, 9, 0]]], { d: 3, m: 600 }) === null, "a period with no close that does not open Sunday 00:00 is dropped");
-check(say([[[3, 9, 0]], P(1, 9, 0, 17, 0)], 3, 12, 0) === "Closed" + D + "Opens 9 AM Mon",
+check(say([[[3, 9, 0]], P(1, 9, 0, 17, 0)], 3, 12, 0) === "Closed" + D + "Opens 9 AM Monday",
       "  ... and does not turn the rest of the week into Open 24 hours");
-check(say([P(1, 9, 0, 17, 0), [[3, 0, 0], [3, 0, 0]]], 0, 12, 0) === "Closed" + D + "Opens 9 AM Mon",
+check(say([P(1, 9, 0, 17, 0), [[3, 0, 0], [3, 0, 0]]], 0, 12, 0) === "Closed" + D + "Opens 9 AM Monday",
       "a period whose close equals its open, away from Sunday 00:00, is dropped too");
 check(say([[[0, 0, 0], [0, 0, 0]]], 4, 4, 0) === "Open 24 hours", "  ... and at Sunday 00:00 it is Google's open 24 hours");
 check(same(H.spans([[[1, 9], [1, 17, 0]], P(2, 9, 0, 17, 0)]), [[3420, 3900]]), "a malformed point drops its period");
@@ -400,8 +403,8 @@ check(bodies.every((b) => b.rows[0].className === "is-today" && b.rows[0].getAtt
 check(bodies.every((b) => b.rows.slice(1).every((r) => r.className === "" && r.getAttribute("aria-current") === null)),
       "no other row is marked");
 const slots = blk.querySelectorAll(".avalon-hours__status");
-check(slots.length === 2 && slots.every((s) => s.textContent === "Closed" + D + "Opens 10 AM Sun"),
-      "both status slots read Closed · Opens 10 AM Sun");
+check(slots.length === 2 && slots.every((s) => s.textContent === "Closed" + D + "Opens 10 AM Sunday"),
+      "both status slots read Closed · Opens 10 AM Sunday");
 check(slots.every((s) => s.children[0].className === "avalon-hours__word avalon-hours__word--closed"),
       "the word carries the closed tone class");
 check(blk.getAttribute("data-avalon-ready") === "1", "the block is marked ready");
@@ -429,8 +432,8 @@ card.addEventListener("click", () => { cardClicks++; });
 const cb = cardBlock(ny(refw), hours);
 card.appendChild(cb);
 H.enhance(cb, at(utc(2026, 10, 4, 2)));
-check(statusOf(cb)[0] === "Closed" + D + "Opens 10 AM Sun" && cb.querySelectorAll("summary")[0].textContent.indexOf("Hours: ") === 0,
-      "the card's summary reads Hours: Closed · Opens 10 AM Sun");
+check(statusOf(cb)[0] === "Closed" + D + "Opens 10 AM Sunday" && cb.querySelectorAll("summary")[0].textContent.indexOf("Hours: ") === 0,
+      "the card's summary reads Hours: Closed · Opens 10 AM Sunday");
 const ev = cb.querySelectorAll("summary")[0].click();
 check(ev.stopped === true && cardClicks === 0, "a click on Hours: does not reach the card's click handler");
 cb.querySelectorAll(".avalon-hours__week tbody")[0].rows[3].click();
@@ -479,7 +482,7 @@ page.appendChild(bad); page.appendChild(a); page.appendChild(b);
 b.setAttribute("data-avalon-ready", "1");
 let scanThrew = false;
 try { H.scan(page, at(utc(2026, 10, 4, 2))); } catch (e) { scanThrew = true; }
-check(!scanThrew && statusOf(a)[1] === "Closed" + D + "Opens 10 AM Sun",
+check(!scanThrew && statusOf(a)[1] === "Closed" + D + "Opens 10 AM Sunday",
       "a block whose schedule throws does not stop the next one");
 check(statusOf(bad)[1] === "See hours" && bad.getAttribute("data-avalon-ready") === "1",
       "  ... it keeps its week as printed, and is not retried on every scan");
@@ -543,7 +546,7 @@ check(statusOf(cblk)[0] === "Closes soon" + D + "5 PM", "loaded at 16:59:59: Clo
 check(env.timers.length === 1 && env.timers[0].ms === 1020, "the first refresh is armed for the minute boundary, 1.02 s away");
 env.now += 1020;
 if (env.timers[0]) { fire(env, 0); }
-check(statusOf(cblk)[0] === "Closed" + D + "Opens 10 AM Sun", "at 17:00:00 it reads Closed · Opens 10 AM Sun - not a minute late");
+check(statusOf(cblk)[0] === "Closed" + D + "Opens 10 AM Sunday", "at 17:00:00 it reads Closed · Opens 10 AM Sunday - not a minute late");
 check(env.timers.length === 2 && env.timers[1].ms === 60000, "and the next is armed a full minute on, still on the boundary");
 env.now = utc(2026, 10, 4, 14, 30, 30) * 1000;   /* Sun 10:30:30 EDT, a day later */
 (env.winL.pageshow || []).forEach((fn) => fn({}));
@@ -556,7 +559,7 @@ env.doc.visibilityState = "hidden";
 check(statusOf(cblk)[0] === "Open" + D + "Closes 3 PM", "hidden: no work");
 env.doc.visibilityState = "visible";
 (env.docL.visibilitychange || []).forEach((fn) => fn({}));
-check(statusOf(cblk)[0] === "Closed" + D + "Opens 9 AM Mon" && live(env).length === 1,
+check(statusOf(cblk)[0] === "Closed" + D + "Opens 9 AM Monday" && live(env).length === 1,
       "visible again: brought up to date at once, still one timer");
 
 });
@@ -575,13 +578,13 @@ check(oenv.timers.length === 0, "no block yet, no timer");
 const oc = cardBlock(ny(refw), hours);
 side.appendChild(oc);
 obs.cb([]);
-check(statusOf(oc)[0] === "Closed" + D + "Opens 10 AM Sun" && oenv.timers.length === 1,
+check(statusOf(oc)[0] === "Closed" + D + "Opens 10 AM Sunday" && oenv.timers.length === 1,
       "a card SLP inserts after a search is enhanced, and the timer starts");
 side.children.slice().forEach((ch) => side.removeChild(ch));
 const oc2 = cardBlock(ny(refw), hours);
 side.appendChild(oc2);
 obs.cb([]);
-check(statusOf(oc2)[0] === "Closed" + D + "Opens 10 AM Sun" && oenv.timers.length === 1,
+check(statusOf(oc2)[0] === "Closed" + D + "Opens 10 AM Sunday" && oenv.timers.length === 1,
       "a second search's cards too, with the same single timer");
 const fpage = new El("div");
 const fenv = boot({ page: fpage, slpFilter: true, now: utc(2026, 10, 4, 2) * 1000 });
@@ -590,7 +593,7 @@ check(fenv.subs.length === 1 && fenv.subs[0][0] === "location_search_processed",
 const fc = cardBlock(ny(refw), hours);
 fpage.appendChild(fc);
 if (fenv.subs.length) { fenv.subs[0][1](); }
-check(statusOf(fc)[0] === "Closed" + D + "Opens 10 AM Sun", "  ... and a card it reports is enhanced");
+check(statusOf(fc)[0] === "Closed" + D + "Opens 10 AM Sunday", "  ... and a card it reports is enhanced");
 let loadThrew = false;
 const tpage = new El("div");
 const tblk = storeBlock(ny(refw), hours);
@@ -598,7 +601,7 @@ tpage.appendChild(tblk);
 try {
   boot({ page: tpage, now: utc(2026, 10, 4, 2) * 1000, slpFilterThrows: true });
 } catch (e) { loadThrew = true; }
-check(!loadThrew && statusOf(tblk)[0] === "Closed" + D + "Opens 10 AM Sun",
+check(!loadThrew && statusOf(tblk)[0] === "Closed" + D + "Opens 10 AM Sunday",
       "no observer and an slp_Filter that throws: the script still loads, and the store page still works");
 });
 

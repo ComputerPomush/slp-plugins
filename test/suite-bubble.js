@@ -1,5 +1,6 @@
 /**
  * suite-bubble.js - validates slp_avalon/assets/js/avalon-hours.js, v0.0.27 Part 4b.
+ * r2, v0.0.27 Part 4d: the identity through Part 4d's edits; the weekday in full.
  *
  * Part 4b adds to avalon-hours.js what the map's info bubble needs, and
  * nothing else:
@@ -20,6 +21,11 @@
  * edits and requires Part 4's script byte for byte - abf65063, 12,279
  * bytes. Everything else in the file is Part 4's, and suite-hours.js -
  * Part 4's suite, unchanged - scores it 119/119 as before.
+ *
+ * r2. From Part 4d the identity takes Part 4d's edits out first - the
+ * list and the reversal are suite-cards.js's, which require() reads
+ * without running it - and works on Part 4b's script from there; the
+ * painted words carry the weekday in full. Still 40 assertions.
  *
  * Runs the SHIPPED file in a vm context, as suite-hours.js does, against a
  * small fake DOM. No npm dependencies - node alone. Intl is shadowed.
@@ -138,12 +144,16 @@ const FUNCS_EXPECT = { md5: "9adb163caf2a866c584ca128b2cfadcb", len: 1858 };
 
 console.log("  IDENTITY");
 section("identity", 7, () => {
-  let rev = src;
-  let ok = true;
-  const fa = src.indexOf(FUNCS_START);
-  const fb = src.indexOf(FUNCS_END, fa);
-  check(fa > 0 && fb > fa && src.indexOf(FUNCS_START, fa + 1) < 0, "the Part 4b functions sit once, directly before boot()");
-  const funcs = fa > 0 && fb > fa ? src.slice(fa, fb) : "";
+  /* r2: Part 4d's edits out first (suite-cards.js), so what follows reads
+     Part 4b's script, as this suite was written against. */
+  const p4b = require("./suite-cards.js").reverse(src);
+  const base = p4b === null ? src : p4b;
+  let rev = base;
+  let ok = p4b !== null;
+  const fa = base.indexOf(FUNCS_START);
+  const fb = base.indexOf(FUNCS_END, fa);
+  check(fa > 0 && fb > fa && base.indexOf(FUNCS_START, fa + 1) < 0, "the Part 4b functions sit once, directly before boot()");
+  const funcs = fa > 0 && fb > fa ? base.slice(fa, fb) : "";
   const fmd5 = crypto.createHash("md5").update(funcs, "latin1").digest("hex");
   check(fmd5 === FUNCS_EXPECT.md5 && funcs.length === FUNCS_EXPECT.len,
         "the functions block is the one this suite was written against (" + FUNCS_EXPECT.md5 + ", " + FUNCS_EXPECT.len + " bytes)");
@@ -154,10 +164,10 @@ section("identity", 7, () => {
     if (n !== 1) { ok = false; console.log("      edit " + i + " found " + n + " times"); return; }
     rev = rev.replace(e[0], () => e[1]);
   });
-  check(ok, "each of the other four edits is present exactly once");
+  check(ok, "Part 4d's edits reversed, each of the other four edits is present exactly once");
   const md5 = crypto.createHash("md5").update(rev, "latin1").digest("hex");
   check(md5 === P4.md5 && Buffer.byteLength(rev, "latin1") === P4.len,
-        "the five edits reversed, the file IS Part 4's avalon-hours.js (abf65063, 12,279 bytes)");
+        "Part 4d's and the five reversed, the file IS Part 4's avalon-hours.js (abf65063, 12,279 bytes)");
   check(/^[\x00-\x7f]*$/.test(src) && src.indexOf("\r") < 0, "pure ASCII, LF");
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   check(!/\bIntl\b|toLocale|getTimezoneOffset|\.get(Hours|Minutes|Day|Date|FullYear)\(/.test(code) && code.indexOf("openNow") < 0,
@@ -439,11 +449,11 @@ check(ok(() => { mo.cb([{ addedNodes: [tile] }]); return true; }) && tree.map.qu
 bubbleBits.forEach((b) => tree.pane.appendChild(b));      /* Google opens the bubble */
 check(ok(() => { mo.cb([{ addedNodes: bubbleBits }]); return true; }) && tree.map.queries === 1, "the bubble opening: one scan of #map");
 check(tree.block.getAttribute("data-avalon-ready") === "1", "the bubble's hours block is taken in");
-check(statusOf(tree.block)[0] === "Closed" + D + "Opens 10 AM Sun", "  ... and painted: Closed" + D + "Opens 10 AM Sun");
+check(statusOf(tree.block)[0] === "Closed" + D + "Opens 10 AM Sunday", "  ... and painted: Closed" + D + "Opens 10 AM Sunday");
 const rows = tree.block.querySelectorAll(".avalon-hours__week tbody")[0].rows;
 check(rows[0].getAttribute("data-day") === "6" && rows[0].className === "is-today", "  ... today, Saturday, first and bold");
 check(ok(() => { mo.cb([{ addedNodes: bubbleBits }]); return true; }) && tree.map.queries === 2
-      && statusOf(tree.block)[0] === "Closed" + D + "Opens 10 AM Sun",
+      && statusOf(tree.block)[0] === "Closed" + D + "Opens 10 AM Sunday",
       "the same block again: scanned, not enhanced twice");
 tree.details.open = true;
 check(ok(() => { env.toggle(tree.details); return true; }) && same(env.pans, [[0, -48]]),
