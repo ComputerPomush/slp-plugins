@@ -1,6 +1,8 @@
 /**
  * suite-hours.js - validates slp_avalon/assets/js/avalon-hours.js, v0.0.27 Part 4.
  * r2, v0.0.27 Part 4d: the weekday in full, as the approved design has it.
+ * r3, v0.0.27 Part 4e: a card's opened week is the card again - a click on a
+ * day's row reaches it; the fake DOM gives a click its target.
  *
  * Runs the SHIPPED file in a vm context, as harness.js does for slp_avalon.js:
  * the suite exercises the artefact, not a copy of its logic. No npm
@@ -23,7 +25,9 @@
  *               in full, "Closed · Opens 10 AM Sunday", the one change;
  *               suite-cards.js holds Part 4d's own checks
  *   enhance()   against a small fake DOM: today first and bold, the status
- *               painted into every slot, a card's clicks kept off the card,
+ *               painted into every slot, a card's Hours line kept off the
+ *               card and - from Part 4e (r3) - its opened week not;
+ *               suite-cards.js holds Part 4e's own checks;
  *               nothing rewritten while nothing changed, one bad block kept
  *               from stopping the rest, a block with no zone or an expired
  *               schedule left alone
@@ -72,17 +76,21 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 /* ------------------------------------------------------------ fake DOM */
 
 /* Just enough DOM for the script: attributes, children, the five selectors
-   it queries, tbody.rows, and click dispatch with bubbling. appendChild is
-   counted, so a pass that rewrites nothing can be told from one that does. */
+   it queries, tbody.rows, and click dispatch with bubbling - from r3 with
+   the click's target and each node's parentNode, which Part 4e's keep()
+   walks. appendChild is counted, so a pass that rewrites nothing can be
+   told from one that does. */
 let APPENDS = 0;
 class El {
   constructor(tag, attrs) {
     this.tagName = tag.toUpperCase();
+    this.nodeType = 1;
     this.attrs = Object.assign({}, attrs || {});
     this.children = [];
     this.parent = null;
     this.listeners = {};
   }
+  get parentNode() { return this.parent; }
   get className() { return this.attrs["class"] || ""; }
   set className(v) { this.attrs["class"] = v; }
   getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; }
@@ -134,7 +142,7 @@ class El {
   }
   addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
   click() {
-    const ev = { stopped: false, stopPropagation() { this.stopped = true; } };
+    const ev = { stopped: false, target: this, stopPropagation() { this.stopped = true; } };
     for (let n = this; n && !ev.stopped; n = n.parent) {
       (n.listeners.click || []).forEach((fn) => fn(ev));
     }
@@ -436,16 +444,16 @@ check(statusOf(cb)[0] === "Closed" + D + "Opens 10 AM Sunday" && cb.querySelecto
       "the card's summary reads Hours: Closed · Opens 10 AM Sunday");
 const ev = cb.querySelectorAll("summary")[0].click();
 check(ev.stopped === true && cardClicks === 0, "a click on Hours: does not reach the card's click handler");
-cb.querySelectorAll(".avalon-hours__week tbody")[0].rows[3].click();
-check(cardClicks === 0, "nor does a click on a row of the opened week");
+const rowEv = cb.querySelectorAll(".avalon-hours__week tbody")[0].rows[3].click();
+check(rowEv.stopped === false && cardClicks === 1, "a click on a row of the opened week does - from Part 4e the week is the card again");
 H.enhance(cb, at(utc(2026, 10, 4, 14, 30)));
 H.enhance(cb, at(utc(2026, 10, 4, 15, 30)));
 cb.querySelectorAll("summary")[0].click();
-check(cardClicks === 0 && cb.listeners.click.length === 1, "the guard is bound once, not once per refresh");
+check(cardClicks === 1 && cb.listeners.click.length === 1, "the guard is bound once, not once per refresh");
 const outside = new El("span");
 card.appendChild(outside);
 outside.click();
-check(cardClicks === 1, "a click elsewhere on the card still reaches it");
+check(cardClicks === 2, "a click elsewhere on the card still reaches it");
 
 });
 

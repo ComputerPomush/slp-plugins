@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.js
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4d.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4e.
  *
  * Google-style opening hours on store pages and find-a-dealer result cards.
  *
@@ -35,6 +35,11 @@
  * screen readers; and on a card and in the bubble, where Hours: has moved
  * out of the <summary> into the label column, a click on it still opens
  * and shuts the week.
+ *
+ * Part 4e: on a card, only the Hours line itself - the <summary> - and an
+ * attribution link keep their clicks from the card. A click on the opened
+ * week reaches it: with the week open, most of the card took no click and
+ * showed no ring (the owner, 2026-10-07).
  */
 (function (root, doc) {
   "use strict";
@@ -290,16 +295,35 @@
   }
 
   /**
-   * On a result card, a click anywhere in the hours block - the Hours line,
-   * the opened week, an attribution link - does what it does there and
-   * nothing else. SLP binds a click on every result card that recentres
-   * the map and opens its bubble, and the theme marks the card active;
-   * neither should fire because a visitor wanted the hours. The native
-   * toggle is the click's default action on the summary, so it still
-   * happens. The store page has no such handler and is left alone.
+   * On a result card, a click on the Hours line - the <summary> - or on an
+   * attribution link does what it does there and nothing else. SLP binds a
+   * click on every result card that chooses its dealer (slp_avalon.js), and
+   * the theme marks the card active; neither should fire because a visitor
+   * wanted the hours. The native toggle is the click's default action on
+   * the summary, so it still happens. The store page has no such handler
+   * and is left alone.
+   *
+   * Part 4e. The opened week is the card again. Until Part 4e a click
+   * anywhere in the block was kept, so a card with its week open took no
+   * click over most of its height and showed no ring (the owner,
+   * 2026-10-07). A click on a day's row now goes on to the card, as one on
+   * its address does. The walk up from the click stops at the block: a
+   * link the block itself might sit in is not this function's to judge.
    */
   function keep(e) {
-    e.stopPropagation();
+    var n = e && e.target;
+    if (n && n.nodeType === 3) {
+      n = n.parentNode;
+    }
+    for (; n && n.tagName; n = n.parentNode) {
+      if (n.tagName === "SUMMARY" || n.tagName === "A") {
+        e.stopPropagation();
+        return;
+      }
+      if ((" " + n.className + " ").indexOf(" avalon-hours ") >= 0) {
+        return;
+      }
+    }
   }
 
   /**

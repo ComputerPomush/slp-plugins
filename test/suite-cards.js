@@ -1,5 +1,7 @@
 /**
  * suite-cards.js - validates slp_avalon/assets/js/avalon-hours.js, v0.0.27 Part 4d.
+ * r2, v0.0.27 Part 4e: keep() - which of a card's clicks stay off the card;
+ * the identity through Part 4e's edits.
  *
  * Part 4d brings avalon-hours.js to the approved find-a-dealer design (the
  * owner's handoff of 2026-10-06, decisions of 2026-10-07):
@@ -17,12 +19,23 @@
  *             out of the <summary>: a click on it opens and shuts the week
  *             and goes no further, as a click in the block does; wired once
  *
- * WHAT CARRIES FORWARD BY IDENTITY. The first assertions reverse Part 4d's
- * edits and require Part 4b's script byte for byte - 76a62b75, 14,683
- * bytes. Everything else in the file is Part 4b's: suite-hours.js r2 -
- * Part 4's suite, its expected words now in full - scores it 119/119, and
- * suite-bubble.js r2 - Part 4b's, whose identity takes these edits out
- * first, read from here - 40/40.
+ * r2, Part 4e (the owner's review of Part 4d on Aura DEV, 2026-10-07):
+ *
+ *   keep()    a card's hours block kept every click from the card, so a
+ *             card with its week open took no click over most of its
+ *             height and showed no ring. Only the Hours line itself - the
+ *             <summary> and what is in it - and an attribution link keep
+ *             their clicks now; a day's row, the table, the block reach
+ *             the card. The walk up from the click stops at the block.
+ *
+ * WHAT CARRIES FORWARD BY IDENTITY. The first assertions reverse Part 4e's
+ * three edits and require Part 4d's script byte for byte - 6d4c084f, 17,315
+ * bytes - then Part 4d's and require Part 4b's - 76a62b75, 14,683 bytes.
+ * Everything else in the file is Part 4b's: suite-hours.js r3 - Part 4's
+ * suite, its fake DOM given what keep() reads - scores it 119/119, and
+ * suite-bubble.js r2 - Part 4b's, unchanged, whose identity reads
+ * reverse() from here, which takes Part 4e's edits out before Part 4d's -
+ * 40/40.
  *
  * Runs the SHIPPED file in a vm context against a small fake DOM, as
  * suite-hours.js does. No npm dependencies - node alone. Intl is shadowed.
@@ -34,8 +47,8 @@
  *
  *   node test/suite-cards.js <path-to-avalon-hours.js>
  *
- * suite-bubble.js require()s this file for EDITS, P4B and reverse() only;
- * nothing runs then.
+ * suite-bubble.js require()s this file for reverse() only; nothing runs
+ * then.
  *
  * Exit 0 all passed, 1 any failed, 2 the suite could not run.
  */
@@ -49,6 +62,74 @@ const crypto = require("crypto");
 
 /* Part 4b's script: what Part 4d's edits reverse to. */
 const P4B = { md5: "76a62b751b5556b96b79c2734b05dca8", len: 14683 };
+/* Part 4d's script: what Part 4e's edits reverse to. */
+const P4D = { md5: "6d4c084f963e68271b0194926663eecf", len: 17315 };
+
+/* r2. [what it is, what Part 4d had, what Part 4e wrote], in the order
+   build-v027-part4e.py makes them. */
+const P4E_EDITS = [
+  ["avalon-hours.js: the header names Part 4e",
+   " * avalon-hours.js\n" +
+   " * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4d.\n" +
+   " *\n",
+   " * avalon-hours.js\n" +
+   " * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4e.\n" +
+   " *\n"],
+  ["avalon-hours.js: the header says what Part 4e changes",
+   " * and shuts the week.\n" +
+   " */\n",
+   " * and shuts the week.\n" +
+   " *\n" +
+   " * Part 4e: on a card, only the Hours line itself - the <summary> - and an\n" +
+   " * attribution link keep their clicks from the card. A click on the opened\n" +
+   " * week reaches it: with the week open, most of the card took no click and\n" +
+   " * showed no ring (the owner, 2026-10-07).\n" +
+   " */\n"],
+  ["avalon-hours.js: keep() - only the summary and a link keep their clicks from the card",
+   "  /**\n" +
+   "   * On a result card, a click anywhere in the hours block - the Hours line,\n" +
+   "   * the opened week, an attribution link - does what it does there and\n" +
+   "   * nothing else. SLP binds a click on every result card that recentres\n" +
+   "   * the map and opens its bubble, and the theme marks the card active;\n" +
+   "   * neither should fire because a visitor wanted the hours. The native\n" +
+   "   * toggle is the click's default action on the summary, so it still\n" +
+   "   * happens. The store page has no such handler and is left alone.\n" +
+   "   */\n" +
+   "  function keep(e) {\n" +
+   "    e.stopPropagation();\n" +
+   "  }\n",
+   "  /**\n" +
+   "   * On a result card, a click on the Hours line - the <summary> - or on an\n" +
+   "   * attribution link does what it does there and nothing else. SLP binds a\n" +
+   "   * click on every result card that chooses its dealer (slp_avalon.js), and\n" +
+   "   * the theme marks the card active; neither should fire because a visitor\n" +
+   "   * wanted the hours. The native toggle is the click's default action on\n" +
+   "   * the summary, so it still happens. The store page has no such handler\n" +
+   "   * and is left alone.\n" +
+   "   *\n" +
+   "   * Part 4e. The opened week is the card again. Until Part 4e a click\n" +
+   "   * anywhere in the block was kept, so a card with its week open took no\n" +
+   "   * click over most of its height and showed no ring (the owner,\n" +
+   "   * 2026-10-07). A click on a day's row now goes on to the card, as one on\n" +
+   "   * its address does. The walk up from the click stops at the block: a\n" +
+   "   * link the block itself might sit in is not this function's to judge.\n" +
+   "   */\n" +
+   "  function keep(e) {\n" +
+   "    var n = e && e.target;\n" +
+   "    if (n && n.nodeType === 3) {\n" +
+   "      n = n.parentNode;\n" +
+   "    }\n" +
+   "    for (; n && n.tagName; n = n.parentNode) {\n" +
+   "      if (n.tagName === \"SUMMARY\" || n.tagName === \"A\") {\n" +
+   "        e.stopPropagation();\n" +
+   "        return;\n" +
+   "      }\n" +
+   "      if ((\" \" + n.className + \" \").indexOf(\" avalon-hours \") >= 0) {\n" +
+   "        return;\n" +
+   "      }\n" +
+   "    }\n" +
+   "  }\n"]
+];
 
 /* [what it is, what Part 4b had, what Part 4d wrote], in the order
    build-v027-part4d.py makes them. */
@@ -212,12 +293,12 @@ const EDITS = [
    "    last: last,\n"]
 ];
 
-/* The script with Part 4d's edits taken out, the last made first; null
-   when one of them is not there exactly once. */
-function reverse(text) {
+/* A script with a list of edits taken out, the last made first; null when
+   one of them is not there exactly once. */
+function undo(text, edits) {
   let t = text;
-  for (let i = EDITS.length - 1; i >= 0; i--) {
-    const e = EDITS[i];
+  for (let i = edits.length - 1; i >= 0 && t !== null; i--) {
+    const e = edits[i];
     if (t.split(e[2]).length - 1 !== 1) {
       return null;
     }
@@ -225,8 +306,18 @@ function reverse(text) {
   }
   return t;
 }
+/* r2. The shipped script with Part 4e's edits taken out: Part 4d's. */
+function reverse4e(text) {
+  return undo(text, P4E_EDITS);
+}
+/* The shipped script with Part 4e's edits, then Part 4d's, taken out:
+   Part 4b's. Before r2 the shipped script was Part 4d's. */
+function reverse(text) {
+  const p4d = reverse4e(text);
+  return p4d === null ? null : undo(p4d, EDITS);
+}
 
-module.exports = { EDITS: EDITS, P4B: P4B, reverse: reverse };
+module.exports = { EDITS: EDITS, P4B: P4B, P4D: P4D, P4E_EDITS: P4E_EDITS, reverse: reverse, reverse4e: reverse4e };
 
 if (require.main === module) {
   main();
@@ -276,13 +367,19 @@ function main() {
   /* ---------------------------------------------------------- identity */
 
   console.log("  IDENTITY");
-  section("identity", 5, () => {
-    const present = EDITS.every((e) => src.split(e[2]).length - 1 === 1);
-    check(present, "each of Part 4d's " + EDITS.length + " edits is present exactly once");
+  section("identity", 7, () => {
+    const md5of = (t) => (t === null ? "" : crypto.createHash("md5").update(t, "latin1").digest("hex"));
+    check(P4E_EDITS.every((e) => src.split(e[2]).length - 1 === 1),
+          "each of Part 4e's " + P4E_EDITS.length + " edits is present exactly once");
+    const p4d = reverse4e(src);
+    check(p4d !== null && md5of(p4d) === P4D.md5 && Buffer.byteLength(p4d, "latin1") === P4D.len,
+          "Part 4e's edits reversed, the file IS Part 4d's avalon-hours.js (6d4c084f, 17,315 bytes)");
+    const present = p4d !== null && EDITS.every((e) => p4d.split(e[2]).length - 1 === 1);
+    check(present, "  ... in which each of Part 4d's " + EDITS.length + " edits is present exactly once");
     const rev = reverse(src);
-    const md5 = rev === null ? "" : crypto.createHash("md5").update(rev, "latin1").digest("hex");
+    const md5 = md5of(rev);
     check(rev !== null && md5 === P4B.md5 && Buffer.byteLength(rev, "latin1") === P4B.len,
-          "the edits reversed, the file IS Part 4b's avalon-hours.js (76a62b75, 14,683 bytes)");
+          "those reversed too, the file IS Part 4b's avalon-hours.js (76a62b75, 14,683 bytes)");
     check(/^[\x00-\x7f]*$/.test(src) && src.indexOf("\r") < 0, "pure ASCII, LF");
     const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     check(!/\bIntl\b|toLocale|getTimezoneOffset|\.get(Hours|Minutes|Day|Date|FullYear)\(/.test(code) && code.indexOf("openNow") < 0,
@@ -301,6 +398,7 @@ function main() {
   class Txt {
     constructor(t) { this.t = String(t); this.parent = null; this.children = []; this.nodeType = 3; }
     get textContent() { return this.t; }
+    get parentNode() { return this.parent; }
   }
   class El {
     constructor(tag, attrs) {
@@ -598,6 +696,83 @@ function main() {
     }
     check(!(loose.listeners.click || []).length && !(c.phone.listeners.click || []).length && !threw && odd.details.open === false,
           "no label wired beside a store block, or for a card block after its phone line or alone; a label whose block has no week: its click throws nothing");
+  });
+
+  /* -------------------------------------------------------------- keep */
+
+  console.log("");
+  console.log("  keep() - Part 4e: which of a card's clicks stay off the card");
+  section("keep", 9, () => {
+    const H = load();
+    const c = card();
+    let reached = 0;
+    c.entry.addEventListener("click", () => { reached++; });   /* SLP's card handler, main.js's .active */
+    const link = T("a", { href: "https://example.test/attr" }, ["Test Source"]);
+    const attr = T("p", { "class": "avalon-hours__attr" }, ["Hours from ", link]);
+    c.details.appendChild(attr);
+    H.enhance(c.block, edt(2026, 10, 5, 22, 0));
+    const summary = c.details.children[0];
+    const ev = summary.click();
+    check(summary.tagName === "SUMMARY" && ev.stopped === true && reached === 0,
+          "a click on the Hours line - the <summary> - goes no further: the card is not chosen for wanting the hours");
+    const inner = summary.all().filter((n) => n instanceof El);
+    const stops = inner.map((n) => n.click().stopped);
+    check(inner.length >= 4 && stops.every((s) => s === true) && reached === 0,
+          "  ... nor does one on anything inside it - the status, its coloured word, the caret (" + inner.length + " elements)");
+    const tb = c.block.querySelectorAll(".avalon-hours__week tbody")[0];
+    const row = tb.rows[3];
+    row.click();
+    row.children[0].click();
+    row.children[1].click();
+    row.children[1].children[0].click();
+    check(reached === 4, "a click on a day's row of the opened week reaches the card - the row, its day, its hours, the span round them");
+    tb.rows[0].click();
+    tb.parent.click();
+    c.details.click();
+    c.block.click();
+    check(reached === 8, "  ... as does one on today's row, the table, the <details> outside its summary, the block itself");
+    const before = reached;
+    const lev = link.click();
+    check(lev.stopped === true && reached === before, "a click on an attribution link is kept from the card: the link is what was wanted");
+    attr.click();
+    check(reached === before + 1, "  ... one beside the link, on its paragraph, is the card's");
+    /* A click whose target is a text node is its element's. */
+    const fromText = (txt) => {
+      const e = { stopped: false, target: txt, stopPropagation() { this.stopped = true; } };
+      for (let n = txt.parent; n && !e.stopped; n = n.parent) {
+        (n.listeners.click || []).slice().forEach((fn) => fn(e));
+      }
+      return e;
+    };
+    const sumText = summary.all().filter((n) => n instanceof Txt)[0];
+    const rowText = row.all().filter((n) => n instanceof Txt)[0];
+    const r0 = reached;
+    check(fromText(sumText).stopped === true && fromText(rowText).stopped === false && reached === r0 + 1,
+          "a click that lands on text: the summary's is kept, a row's goes on");
+    let threw = false;
+    let stoppedBare = false;
+    try {
+      (c.block.listeners.click || []).forEach((fn) => {
+        fn({ stopPropagation() { stoppedBare = true; } });
+        fn({ target: null, stopPropagation() { stoppedBare = true; } });
+        fn(null);
+      });
+    } catch (e) {
+      threw = true;
+    }
+    check(!threw && !stoppedBare && (c.block.listeners.click || []).length === 1,
+          "an event with no target stops nothing and throws nothing; one guard on the block");
+    /* The walk up stops at the block. */
+    const wrapped = card();
+    const outer = T("a", { href: "https://example.test/store" }, [wrapped.entry]);
+    let outerReached = 0;
+    outer.addEventListener("click", () => { outerReached++; });
+    H.enhance(wrapped.block, edt(2026, 10, 5, 22, 0));
+    const wev = wrapped.block.querySelectorAll(".avalon-hours__week tbody")[0].rows[2].click();
+    const s = store();
+    H.enhance(s, edt(2026, 10, 5, 22, 0));
+    check(outerReached === 1 && wev.stopped === false && !(s.listeners.click || []).length,
+          "the walk up from a click stops at the block - a link round the whole card does not keep a row's click; the store page's block has no guard at all");
   });
 
   console.log("");

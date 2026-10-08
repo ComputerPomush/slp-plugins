@@ -1510,18 +1510,10 @@
    *           it, focus returns to where it was - the pin a keyboard opened
    *           it from, or wherever it came into the bubble from.
    *   name    the InfoWindow is a dialog named for the dealer (ariaLabel)
-   *   phones  at Elementor's mobile breakpoint the bubble is at least the
-   *           map's width less 24 px, and never more than 376 px, the
-   *           theme's own width. Google reads minWidth only as a bubble
-   *           opens, so a change is close(), setOptions(), open(), as its
-   *           reference says - on the next bubble, and on the open one
-   *           0.2 s after the window stops resizing (a phone turned):
-   *           the same dealer, chosen or not as before, and focus, if it
-   *           was in the bubble, back on its Contact Dealer button. Not
-   *           while the Contact Dealer form is open over the page: once it
-   *           has closed. 767 px is Elementor's default and Aura's; Part
-   *           4's hours fold follows a site that moves it, this does not -
-   *           check before Tahoe or Avalon take Part 4c.
+   *   phones  none there at all, from Part 4e: PHONES, below. Part 4c
+   *           widened the bubble on a phone - minWidth, the map's width
+   *           less 24 px - and reopened it when the phone was turned;
+   *           both went with the bubble.
    *
    * FULL SCREEN. Contact Dealer in a bubble on a map shown full screen
    * leaves full screen first, on the same click: its form opens over the
@@ -1549,10 +1541,42 @@
    * that bubble closes. A bubble opened by hovering marks nothing. main.js
    * marks a clicked card the same way.
    *
-   * THE FADE (Part 4d). On a phone the bubble's body scrolls; while there
-   * is more below, avalon-hours.css fades its foot (.is-more on
-   * .sl_popup_contact_info): looked at as the bubble opens, as it scrolls,
-   * as its week opens or shuts, and after a resize.
+   * PHONES (Part 4e). On a phone - 767 px wide or less, or 500 px high or
+   * less: upright, or sideways and short - a pin opens no bubble (the
+   * owner, 2026-10-07): it covered most of the map to repeat the card
+   * beside or under it, and its week needed a scroller of its own. A pin
+   * chosen there is lit, and its dealer's card is marked, brought into
+   * view, flashed and given focus; a card chosen there is marked and its
+   * pin lit, and the map moves only when that pin is out of sight. Esc, a
+   * tap on the map, another choice or a new search ends it, as they close
+   * a bubble. A hover - a mouse on a narrow window - lights the pin and
+   * nothing more. A window narrowed to a phone's with a bubble open loses
+   * the bubble and keeps the choice; one widened with a dealer chosen
+   * gets that dealer's bubble. A map shown full screen is not a phone's,
+   * whatever the screen: no card can be seen behind it, so its pins open
+   * bubbles, and going in or out of full screen is taken as the window
+   * widening or narrowing. 767 px is Elementor's default and Aura's;
+   * Part 4's hours fold follows a site that moves it, this does not -
+   * check before Tahoe or Avalon take it.
+   *
+   * THE CARD IN VIEW (Part 4e). A dealer chosen on the map - on a phone
+   * or not, but not on its own card, which is under the pointer already -
+   * has its card brought where it can be seen. Beside the map, the
+   * results scroll until the card is at the top of what shows of them,
+   * with room made under the last cards where they could not otherwise
+   * get there. Under the map - a phone upright - the card moves to the
+   * top of the list, and back to its place when another dealer is chosen
+   * there or none is; on a phone the page then scrolls just far enough to
+   * show it, keeping the map's top in view where both fit. Which of the
+   * two it is, is read from where the list lies, not from a width. Where
+   * a bubble opens, the page itself is never scrolled.
+   *
+   * THE BUBBLE'S WIDTH (Part 4e). The bubble is as wide as its content
+   * (the theme), and a week that is shut is not content: opening it could
+   * widen the bubble under the pointer. So the week is measured open,
+   * once, as the bubble arrives, and that width kept as the bubble's
+   * least. Part 4d's fade went with the phone's bubble: nothing of ours
+   * scrolls in a bubble now.
    *
    * Part 4c's Font Awesome labels went with Part 4d: words on every
    * screen, the owner's decision of 2026-10-07.
@@ -1560,24 +1584,28 @@
   var avalon_map = (function () {
     var CLOSE_MS = 300;
     var RESIZE_MS = 200;
-    var PHONE = "(max-width: 767px)";
-    var WIDEST = 376;
-    var MARGIN = 24;
+    var FLASH_MS = 1100;
+    var GAP = 8;
+    var PHONE = "(max-width: 767px), (max-height: 500px)";
 
     var st = {
       cm: null,           //SLP's map object, cslmap
       byId: {},           //location id -> { id, marker, info, lit }
-      current: null,      //the entry whose bubble is open
-      open: false,
+      current: null,      //the entry whose bubble is open; on a phone, the dealer chosen
+      open: false,        //a bubble is open
       pinned: false,      //chosen, by a click, a tap or a key
       next: null,         //"hover" for the next show() only
       timer: 0,           //the pending close
-      rs: 0,              //the pending look at the width, after a resize
+      rs: 0,              //the pending look at the window, after a resize
       overMarker: null,   //the location id of the pin under the pointer
       overCard: null,     //the location id of the card under the pointer
       overBubble: false,
-      minWidth: 0,        //the minWidth the InfoWindow was last given
-      quiet: false,       //closing only to reopen at another width
+      via: "",            //"card" while a click on a result card is under way
+      moved: null,        //{ el, next }: the card moved to the top of a list under the map
+      pad: null,          //{ el, card }: the results padded so that card can reach their top
+      fl: 0,              //the end of the flash
+      sent: null,         //what to_card() gave focus to
+      quiet: false,       //closing a bubble the visitor did not ask to close
       wantFocus: false,   //move focus in once the content is in the page
       from: null,         //where focus was when the bubble was chosen
       back: null,         //where focus was before it moved in
@@ -1636,13 +1664,362 @@
       }
     }
 
-    //Part 4d. The fade at the foot of the bubble's body while there is
-    //more below it; none at the end, none where nothing scrolls.
-    function more() {
-      var b = bubble();
-      var s = b ? b.querySelector(".sl_popup_contact_info") : null;
+    //Part 4e. A phone: upright, or sideways and short. No bubble there -
+    //but for a map shown full screen, where no card can be seen.
+    function phone() {
+      var d = document;
+      return !(d.fullscreenElement || d.webkitFullscreenElement) &&
+             !!(window.matchMedia && window.matchMedia(PHONE).matches);
+    }
+
+    //Part 4e. A dealer's card in the results, or null.
+    function card_of(e) {
+      return e ? document.getElementById("slp_results_wrapper_" + e.id) : null;
+    }
+
+    //Part 4e. On a result card.
+    function on_card(el) {
+      for (var n = el; n && n.nodeType === 1; n = n.parentNode) {
+        if (has_class(n, "results_wrapper")) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    //Part 4e. What scrolls a card: the nearest box above it that scrolls up
+    //and down - the theme's results box on Aura - or null where only the
+    //page does.
+    function scroller(c) {
+      if (typeof window.getComputedStyle !== "function") {
+        return null;
+      }
+      for (var n = c.parentNode; n && n.nodeType === 1 && n !== document.body && n !== document.documentElement; n = n.parentNode) {
+        var o = window.getComputedStyle(n).overflowY;
+        if (o === "auto" || o === "scroll") {
+          return n;
+        }
+      }
+      return null;
+    }
+
+    //Part 4e. Whether the results lie under the map - a phone upright - and
+    //not beside it: read from the page, so that the theme's own breakpoint
+    //decides. Their box, not the list in it, which moves as it scrolls.
+    function stacked(box) {
+      var g = st.cm && st.cm.gmap;
+      var m = g && typeof g.getDiv === "function" ? g.getDiv() : null;
+      if (!m || !box || !m.getBoundingClientRect || !box.getBoundingClientRect) {
+        return false;
+      }
+      return box.getBoundingClientRect().top >= m.getBoundingClientRect().bottom - 1;
+    }
+
+    //Part 4e. How much of the window's top a fixed or sticky header covers:
+    //nothing on Aura, whose header scrolls away; an admin bar's 32 px.
+    function inset() {
+      var w = window.innerWidth || 0;
+      var h = window.innerHeight || 0;
+      if (typeof document.elementFromPoint !== "function" || typeof window.getComputedStyle !== "function") {
+        return 0;
+      }
+      for (var n = document.elementFromPoint(Math.floor(w / 2), 1); n && n.nodeType === 1 && n !== document.body && n !== document.documentElement; n = n.parentNode) {
+        var p = window.getComputedStyle(n).position;
+        if (p === "fixed" || p === "sticky") {
+          var b = n.getBoundingClientRect().bottom;
+          return b > 0 && b < h / 2 ? b : 0;
+        }
+      }
+      return 0;
+    }
+
+    //Part 4e. A box, or the page, scrolled down by dy px - up, when dy is
+    //less than nothing - smoothly, unless the visitor has asked for less
+    //motion: then at once, whatever the page's own scroll-behavior says
+    //(Aura's is smooth).
+    function scroll_by(el, dy) {
+      var calm = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      if (!dy) {
+        return;
+      }
+      try {
+        (el || window).scrollBy({ top: dy, left: 0, behavior: calm ? "instant" : "smooth" });
+      } catch (x) {
+        //A browser that takes no options here, or not these: at once.
+        if (el) {
+          el.scrollTop += dy;
+        } else {
+          window.scrollBy(0, dy);
+        }
+      }
+    }
+
+    //Part 4e. The room made under the results taken away again.
+    function unpad() {
+      var p = st.pad;
+      st.pad = null;
+      if (p && p.el && p.el.style) {
+        p.el.style.paddingBottom = "";
+      }
+    }
+
+    //Part 4e. A card moved within its list, before another or to the end.
+    //Moving takes focus from whatever in the card had it: given back.
+    function move(c, p, before) {
+      var a = document.activeElement;
+      var had = !!a && a !== document.body && typeof c.contains === "function" && c.contains(a);
+      if (before) {
+        p.insertBefore(c, before);
+      } else {
+        p.appendChild(c);
+      }
+      if (had && document.activeElement !== a) {
+        try {
+          a.focus({ preventScroll: true });
+        } catch (x) {
+          //Refused: focus stays where moving the card left it.
+        }
+      }
+    }
+
+    //Part 4e. A card moved to the top of its list put back: before the
+    //card it stood before, or last. A list SLP has since drawn again has
+    //nothing to put back.
+    function put_back() {
+      var m = st.moved;
+      st.moved = null;
+      var p = m && m.el ? m.el.parentNode : null;
+      if (!p) {
+        return;
+      }
+      if (m.next && m.next.parentNode === p) {
+        move(m.el, p, m.next);
+      } else if (!m.next) {
+        move(m.el, p, null);
+      }
+    }
+
+    //Part 4e. What place() did for another dealer's card undone; for this
+    //one, left as it is.
+    function unplace(c) {
+      if (st.moved && st.moved.el !== c) {
+        put_back();
+      }
+      if (st.pad && st.pad.card !== c) {
+        unpad();
+      }
+    }
+
+    //Part 4e. Beside the map: the results scrolled until the card is at the
+    //top of what shows of them - their box may reach past the window's
+    //foot, or start above its top. A card already in full view is left
+    //where it is. Near the end of the list the box cannot scroll that far:
+    //room is made under the last card for as long as this one is chosen.
+    //On a phone (far) the page scrolls as well, just far enough to show
+    //the card whole and never taking the box's top out of the window: a
+    //phone held sideways shows less than one card's height of a box that
+    //starts under the search form. Results with no box of their own
+    //scroll with the page, and only there. Where a bubble opens the page
+    //is left alone.
+    function box_to(c, s, far) {
+      var r = c.getBoundingClientRect();
+      var top = inset();
+      var foot = window.innerHeight || document.documentElement.clientHeight || 0;
+      var lo = top;
+      var hi = foot;
+      var b = s ? s.getBoundingClientRect() : null;
+      var edge = lo + GAP;
+      if (b) {
+        //The box's own top, where that shows - or nothing of the box does.
+        edge = b.top >= lo || b.bottom <= lo || b.top >= hi ? b.top : edge;
+        lo = Math.max(lo, b.top);
+        hi = Math.min(hi, b.bottom);
+      }
+      if (r.top >= lo - 1 && r.bottom <= hi + 1) {
+        return;
+      }
+      var dy = Math.round(r.top - edge);
+      if (!s) {
+        if (far) {
+          scroll_by(null, dy);
+        }
+        return;
+      }
+      var max = s.scrollHeight - s.clientHeight - s.scrollTop;
+      var side = document.getElementById("map_sidebar");
+      if (dy > max && side && side.style && typeof window.getComputedStyle === "function") {
+        side.style.paddingBottom = Math.ceil((parseFloat(window.getComputedStyle(side).paddingBottom) || 0) + dy - max) + "px";
+        st.pad = { el: side, card: c };
+      }
+      scroll_by(s, dy);
+      if (far) {
+        scroll_by(null, Math.max(0, Math.round(Math.min(edge + r.bottom - r.top - (foot - GAP), b.top - top - GAP))));
+      }
+    }
+
+    //Part 4e. Under the map, on a phone: the page scrolled just far enough
+    //to show the card - whole, where that leaves the map's top in view;
+    //otherwise the best part of it, 45% of the window or 140 px, and the
+    //map's top let go. Never scrolled back up.
+    function page_to(c) {
+      var g = st.cm && st.cm.gmap;
+      var m = g && typeof g.getDiv === "function" ? g.getDiv() : null;
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (!m || !m.getBoundingClientRect || !vh) {
+        return;
+      }
+      var r = c.getBoundingClientRect();
+      var all = r.bottom - (vh - GAP);
+      var some = r.top + Math.min(r.bottom - r.top, Math.max(140, vh * 0.45)) - (vh - GAP);
+      var room = m.getBoundingClientRect().top - inset() - GAP;
+      var dy = Math.round(Math.max(some, Math.min(all, room)));
+      if (dy > 0) {
+        scroll_by(null, dy);
+      }
+    }
+
+    //Part 4e. THE CARD IN VIEW, in the header above. far: on a phone,
+    //where the page may scroll as well.
+    function place(e, far) {
+      var c = card_of(e);
+      var p = c ? c.parentNode : null;
+      unplace(c);
+      if (!c || !p || !c.getBoundingClientRect) {
+        return;
+      }
+      var s = scroller(c);
+      if (!stacked(s || p)) {
+        if (st.moved) {
+          put_back();
+        }
+        box_to(c, s, far);
+        return;
+      }
+      unpad();
+      var first = typeof p.querySelector === "function" ? p.querySelector(".results_wrapper") : null;
+      if (first && first !== c) {
+        st.moved = { el: c, next: c.nextSibling };
+        move(c, p, first);
+      }
       if (s) {
-        cls(s, "is-more", s.scrollHeight - s.scrollTop - s.clientHeight > 1);
+        s.scrollTop = 0;
+      }
+      if (far) {
+        page_to(c);
+      }
+    }
+
+    //Part 4e. The card flashed, so that the eye finds it: avalon-hours.css
+    //draws .avalon-flash, which comes off again when it is done - or at
+    //once, with no dealer, when the choice ends first.
+    function flash(e) {
+      var c = card_of(e);
+      var on = document.querySelectorAll("#map_sidebar .results_wrapper.avalon-flash");
+      for (var i = 0; i < on.length; i++) {
+        cls(on[i], "avalon-flash", false);
+      }
+      clearTimeout(st.fl);
+      st.fl = 0;
+      if (!c) {
+        return;
+      }
+      //Read, so that a card flashed a moment ago starts over.
+      void c.offsetWidth;
+      cls(c, "avalon-flash", true);
+      st.fl = setTimeout(function () {
+        st.fl = 0;
+        cls(c, "avalon-flash", false);
+      }, FLASH_MS);
+    }
+
+    //Part 4e. A dealer chosen on its card, on a phone: no bubble will bring
+    //the map round to its pin, so the map goes there when the pin is out
+    //of sight - and stays where it is when it is not.
+    function seen(e) {
+      var g = e.marker && e.marker.__gmarker;
+      var m = st.cm && st.cm.gmap;
+      try {
+        var at = g.getPosition();
+        var b = m.getBounds();
+        if (at && b && !b.contains(at)) {
+          m.panTo(at);
+        }
+      } catch (x) {
+        //A map that cannot say where it is stays where it is.
+      }
+    }
+
+    //Part 4e. Focus to the chosen dealer's card - its name, where that is a
+    //link, else the card itself - as it would have gone into a bubble:
+    //without scrolling the page, and remembering where it came from. Not
+    //while the Contact Dealer form is open.
+    function to_card(e) {
+      var c = card_of(e);
+      var a = document.activeElement;
+      if (!c || document.querySelector(".contact-dealer--pop-up.open-modal")) {
+        return;
+      }
+      var t = (typeof c.querySelector === "function" && c.querySelector(".store_locator_name a")) || c;
+      if (t === c && typeof c.setAttribute === "function") {
+        c.setAttribute("tabindex", "-1");
+      }
+      if (a && a !== document.body && !inside(a) && !on_card(a)) {
+        st.back = a;
+      }
+      st.sent = t;
+      try {
+        t.focus({ preventScroll: true });
+      } catch (x) {
+        //A card that refuses focus leaves focus where it was.
+      }
+    }
+
+    //Part 4e. PHONES, in the header above: a dealer chosen, and no bubble.
+    //card: chosen on its own card, which is left where the finger found it.
+    function choose(e, card) {
+      var prev = st.current;
+      if (st.open && st.cm) {
+        reclose(st.cm.infowindow);
+      }
+      st.current = e;
+      st.open = false;
+      st.pinned = true;
+      st.overBubble = false;
+      st.wantFocus = false;
+      st.from = null;
+      if (prev && prev !== e) {
+        lit(prev, hovered(prev));
+      }
+      lit(e, true);
+      ring(e);
+      if (card) {
+        seen(e);
+        return;
+      }
+      place(e, true);
+      flash(e);
+      to_card(e);
+    }
+
+    //Part 4e. THE BUBBLE'S WIDTH, in the header above: the week measured
+    //open, once for each bubble's content, and that width kept as its least.
+    function hold() {
+      var b = bubble();
+      var d = b && typeof b.querySelector === "function" ? b.querySelector(".avalon-hours__narrow") : null;
+      if (!b || b.avalonHeld || !d || d.open || !b.style || !b.getBoundingClientRect) {
+        return;
+      }
+      b.avalonHeld = true;
+      var w = 0;
+      try {
+        d.open = true;
+        w = b.getBoundingClientRect().width;
+      } catch (x) {
+        //Not measured: the bubble keeps the width of its content.
+      }
+      d.open = false;
+      if (w > 0) {
+        b.style.minWidth = Math.ceil(w) + "px";
       }
     }
 
@@ -1727,15 +2104,6 @@
       }, CLOSE_MS);
     }
 
-    function min_width(cm) {
-      if (!window.matchMedia || !window.matchMedia(PHONE).matches) {
-        return 0;
-      }
-      var div = cm.gmap && typeof cm.gmap.getDiv === "function" ? cm.gmap.getDiv() : null;
-      var w = div ? div.clientWidth : 0;
-      return w > MARGIN ? Math.min(WIDEST, w - MARGIN) : 0;
-    }
-
     //The dealer's name as text: SLP's marker carries it esc_attr()'d.
     function name_of(info) {
       return String((info && info.name) || "")
@@ -1810,12 +2178,14 @@
     }
 
     //Focus back where it came from - but only when it was lost with the
-    //bubble, never taken from wherever the visitor has put it since.
-    function restore() {
+    //bubble, or is still where to_card() put it, on the card of a dealer
+    //no longer chosen (held, Part 4e): never taken from wherever the
+    //visitor has put it since.
+    function restore(held) {
       var back = st.back;
       st.back = null;
       var a = document.activeElement;
-      if (!back || (a && a !== document.body && !inside(a))) {
+      if (!back || (a && a !== document.body && !inside(a) && !held)) {
         return;
       }
       if (document.body.contains(back)) {
@@ -1829,6 +2199,8 @@
 
     function clear() {
       var e = st.current;
+      var held = !!st.sent && st.sent === document.activeElement;
+      st.sent = null;
       cancel();
       st.current = null;
       st.open = false;
@@ -1840,7 +2212,9 @@
         lit(e, hovered(e));
       }
       ring(null);
-      restore();
+      flash(null);
+      unplace(null);
+      restore(held);
     }
 
     function close() {
@@ -1852,23 +2226,26 @@
     }
 
     //Google's close event: Esc inside the bubble, its anchor removed, or
-    //close() above. Not the close that only reopens it at another width.
+    //close() above. Not a close of ours that keeps the dealer chosen, nor
+    //(Part 4e) one that arrives when no bubble is up any more: Google may
+    //send it after the fact.
     function closed() {
       var iw = st.cm && st.cm.infowindow;
-      if (st.quiet || (iw && iw.isOpen === true)) {
+      if (st.quiet || !st.open || (iw && iw.isOpen === true)) {
         return;
       }
       clear();
     }
 
-    //Google's close() before the bubble reopens at another width: not the
-    //visitor's, so closed() lets it pass. Google sends focus back to where
-    //it was before the bubble opened (its guide, "Close an info window"),
-    //and focusing can scroll the page. Focus that was in the bubble, or on
-    //nothing, is let go - for focus_in() to put in the bubble reopened, or
-    //to stay on nothing; focus that was elsewhere - the search box, say -
-    //is put back there; the page is put back where it was. Says whether
-    //focus was in the bubble.
+    //Google's close() when a window has narrowed to a phone's with a bubble
+    //open (Part 4e; before it, when a bubble reopened at another width):
+    //not the visitor's, so closed() lets it pass. Google sends focus back
+    //to where it was before the bubble opened (its guide, "Close an info
+    //window"), and focusing can scroll the page. Focus that was in the
+    //bubble, or on nothing, is let go - for to_card() to put on the
+    //dealer's card, or to stay on nothing; focus that was elsewhere - the
+    //search box, say - is put back there; the page is put back where it
+    //was. Says whether focus was in the bubble.
     function reclose(iw) {
       var a = document.activeElement;
       var had = !!a && a !== document.body && inside(a);
@@ -1889,8 +2266,15 @@
         } else if (now !== a && document.body.contains(a)) {
           a.focus({ preventScroll: true });
         }
-        if (window.pageXOffset !== sx || window.pageYOffset !== sy) {
-          window.scrollTo(sx, sy);
+        //Part 4e. At once, and whether or not the page has moved yet:
+        //where the page's own scroll-behavior is smooth - Aura's is - the
+        //scroll a focus sets off only starts later, and this stops it.
+        try {
+          window.scrollTo({ left: sx, top: sy, behavior: "instant" });
+        } catch (y) {
+          if (window.pageXOffset !== sx || window.pageYOffset !== sy) {
+            window.scrollTo(sx, sy);
+          }
         }
       } catch (x) {
         //Refused: focus stays where Google put it.
@@ -1910,22 +2294,22 @@
       }
       var e = entry(info, marker);
       var iw = cm.infowindow;
+      var card = st.via === "card";
       cancel();
+      //Part 4e. A phone has no bubble: a choice goes to the card, and a
+      //hover - enter() has lit the pin - is nothing more.
+      if (phone()) {
+        if (!hover) {
+          choose(e, card);
+        }
+        return;
+      }
       if (!hover) {
         st.from = document.activeElement;
       }
       if (!(st.open && st.current === e)) {
         var prev = st.current;
-        var width = min_width(cm);
-        var opts = { ariaLabel: name_of(info) };
-        if (width !== st.minWidth) {
-          if (st.open) {
-            reclose(iw);
-          }
-          opts.minWidth = width;
-          st.minWidth = width;
-        }
-        iw.setOptions(opts);
+        iw.setOptions({ ariaLabel: name_of(info) });
         iw.setContent(cm.createMarkerContent(info));
         iw.open({ map: cm.gmap, anchor: marker.__gmarker, shouldFocus: false });
         st.current = e;
@@ -1944,46 +2328,73 @@
       if (!hover) {
         st.pinned = true;
         ring(e);
+        if (!card) {
+          place(e, false);
+        }
       }
     }
 
-    //The window has stopped resizing - a phone turned, say. An open bubble
-    //whose minWidth no longer fits the map is reopened at the new one, as
-    //show() does: the same dealer, chosen or not as before. Focus that was
-    //in it - lost as Google takes the bubble out - goes back to its Contact
-    //Dealer once ready() has it in the page again. A map not laid out
-    //(0 px wide) is left alone. Under the Contact Dealer form it waits:
-    //dealer-popup-focus.js gives focus back, as the form closes, to the
-    //link that opened it, which a reopen would take out of the page - and
-    //it falls back to the search box. So it looks again until the form
-    //has closed.
+    //The window has stopped resizing - a phone turned, a window dragged
+    //narrower. Part 4e, where Part 4c reopened the bubble at another width:
+    //
+    //  a phone's now, a bubble open   the bubble goes. A dealer that was
+    //                                 chosen stays chosen, on its card,
+    //                                 which takes the focus the bubble
+    //                                 had; one only hovered is let go.
+    //  a phone's, a dealer chosen     its card where the layout now shows
+    //                                 it: the list is beside the map one
+    //                                 way up and under it the other.
+    //  wider now, a dealer chosen     that dealer's bubble, as a click
+    //    and no bubble                on its pin there would have opened
+    //                                 it - but no focus taken: nobody
+    //                                 chose anything just now.
+    //
+    //A map not laid out (0 px wide) is left alone. Under the Contact Dealer
+    //form it waits: dealer-popup-focus.js gives focus back, as the form
+    //closes, to the link that opened it, which taking the bubble out of
+    //the page would lose - and it falls back to the search box. So it
+    //looks again until the form has closed.
     function resized() {
       st.rs = 0;
-      more();
       var cm = st.cm;
       var e = st.current;
-      if (!cm || !st.open || !e || !e.marker || !e.marker.__gmarker) {
+      if (!cm || !e || !e.marker || !e.marker.__gmarker) {
         return;
       }
       var div = cm.gmap && typeof cm.gmap.getDiv === "function" ? cm.gmap.getDiv() : null;
       if (!div || !div.clientWidth) {
         return;
       }
-      var width = min_width(cm);
-      if (width === st.minWidth) {
+      var small = phone();
+      if (small ? !st.open && !st.pinned : st.open || !st.pinned) {
         return;
       }
       if (document.querySelector(".contact-dealer--pop-up.open-modal")) {
         st.rs = setTimeout(resized, RESIZE_MS);
         return;
       }
-      var iw = cm.infowindow;
-      if (reclose(iw)) {
-        st.wantFocus = true;
+      if (!small) {
+        show(e.info, e.marker);
+        st.wantFocus = false;
+        return;
       }
-      iw.setOptions({ minWidth: width });
-      st.minWidth = width;
-      iw.open({ map: cm.gmap, anchor: e.marker.__gmarker, shouldFocus: false });
+      if (!st.open) {
+        place(e, true);
+        return;
+      }
+      var chosen = st.pinned;
+      var had = reclose(cm.infowindow);
+      st.open = false;
+      st.overBubble = false;
+      st.wantFocus = false;
+      if (!chosen) {
+        clear();
+        return;
+      }
+      place(e, true);
+      if (had) {
+        to_card(e);
+      }
     }
 
     //Contact Dealer - main.js's #slp_bubble_website .storelocatorlink -
@@ -2056,15 +2467,7 @@
           }
         }, false);
       }
-      var b = bubble();
-      var s = b ? b.querySelector(".sl_popup_contact_info") : null;
-      if (s && !s.avalonMore) {
-        s.avalonMore = true;
-        s.addEventListener("scroll", more, false);
-        s.addEventListener("toggle", more, true);
-      }
-      more();
-      setTimeout(more, 0);
+      hold();
       if (st.wantFocus) {
         soon();
       }
@@ -2103,7 +2506,9 @@
       if (st.open && st.current === e) {
         later();
       } else {
-        lit(e, hovered(e));
+        //Part 4e. A dealer chosen on a phone has no bubble to keep its
+        //pin lit: the choice does.
+        lit(e, hovered(e) || (st.pinned && st.current === e));
       }
     }
 
@@ -2112,10 +2517,11 @@
       return id !== "" && st.byId.hasOwnProperty(id) ? st.byId[id] : null;
     }
 
-    //Esc closes the bubble - unless the Contact Dealer form is open over
-    //the page, whose own Esc (dealer-popup-focus.js) comes first.
+    //Esc closes the bubble - on a phone (Part 4e), lets the chosen dealer
+    //go - unless the Contact Dealer form is open over the page, whose own
+    //Esc (dealer-popup-focus.js) comes first.
     function key(ev) {
-      if ((ev.key !== "Escape" && ev.key !== "Esc" && ev.keyCode !== 27) || !st.open || ev.defaultPrevented ||
+      if ((ev.key !== "Escape" && ev.key !== "Esc" && ev.keyCode !== 27) || !(st.open || st.pinned) || ev.defaultPrevented ||
           document.querySelector(".contact-dealer--pop-up.open-modal")) {
         return;
       }
@@ -2136,6 +2542,26 @@
         close();
       });
       document.addEventListener("keydown", key, false);
+      //Part 4e. A click that starts on a result card is known for one
+      //before SLP's handler on the card reaches show() - the capture
+      //phase - and forgotten once the click is done.
+      document.addEventListener("click", function (ev) {
+        if (!on_card(ev && ev.target)) {
+          return;
+        }
+        st.via = "card";
+        setTimeout(function () {
+          st.via = "";
+        }, 0);
+      }, true);
+      //Part 4e. Full screen coming or going changes what phone() says
+      //without the window always saying it has resized.
+      var full = function () {
+        clearTimeout(st.rs);
+        st.rs = setTimeout(resized, RESIZE_MS);
+      };
+      document.addEventListener("fullscreenchange", full, false);
+      document.addEventListener("webkitfullscreenchange", full, false);
       if (window.addEventListener) {
         window.addEventListener("resize", function () {
           clearTimeout(st.rs);
@@ -2208,7 +2634,6 @@
       show: show,
       close: close,
       ring: ring,
-      more: more,
       state: st
     };
   })();

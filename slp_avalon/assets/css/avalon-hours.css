@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.css
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4d.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4e.
  *
  * Google-style opening hours on store pages, find-a-dealer result cards and
  * the map's info bubble. One stylesheet for every surface, shipped with the
@@ -54,6 +54,16 @@
  * under on the cards, at every width in the bubble. Words for the labels
  * on every screen: Part 4c's Font Awesome icons are gone (the owner,
  * 2026-10-07).
+ *
+ * PART 4e, in Part 4d's blocks and the last block of the file: the
+ * owner's decisions of 2026-10-07, with Part 4d on Aura DEV. TODAY under
+ * its hours at every width, on the cards and in the bubble, with more
+ * room under it than over it. No bubble on a phone - slp_avalon.js brings
+ * the dealer's card into view instead, and the card flashes - so the
+ * bubble's body no longer scrolls anywhere: Part 4d's cap on it, its
+ * scrollbar and the fade at its foot are gone, and Part 4c's 14 px email
+ * with them. The bubble is as wide as its content (the theme), so it is no
+ * longer a size container. Open stays green.
  */
 
 .avalon-hours {
@@ -369,21 +379,10 @@ a.avalon-email:focus-visible {
 
 /* ------------------------------------------ Part 4c: phones, portrait */
 
-/* Part 4c's 15 px text and 20 px names are in Part 4d's block, at the end
-   of the file: at 1024 px and under on the cards, at every width in the
-   bubble.
-
-   Part 4c. Under 375 px the email address in the bubble is 14 px; its
-   label stays as the others. Measured again with Part 4d's labels in a
-   column of their own, at the bubble's width on each phone (2026-10-07):
-   none of Aura's 97 emails wraps, from 320 px up; one that did would
-   break inside the address (Part 4b) rather than be cut. 1-2-1: the
-   link sets its own size, under the 15 px it would inherit. */
-@media (max-width: 374px) {
-  .slp_info_bubble #slp_bubble_email a.avalon-email {
-    font-size: 14px;
-  }
-}
+/* Part 4c's 15 px text and 20 px names are in Part 4d's block, further
+   down: at 1024 px and under on the cards, at every width in the bubble.
+   Its 14 px email under 375 px went with Part 4e: a phone has no bubble
+   to show it in. */
 
 /* ------------------------------------------- Part 4d: the cards, one grid */
 
@@ -533,14 +532,19 @@ a.avalon-email:focus-visible {
 
 /* The opened week on a card and in the bubble: a rule across, then the
    days, today first (avalon-hours.js) with a dot before it and TODAY
-   after its hours, both in the primary colour; the other days indented by
+   under its hours, both in the primary colour; the other days indented by
    the dot's width, so every name starts in one column. A table still -
    its row headers are what a screen reader reads - pulled 15 px left, so
    the dot sits in the gap and the day names line up with the status
    above. TODAY is generated text with empty alternative text: the row
-   already says aria-current="date". The hours never break here; TODAY
-   drops under them where a card is too narrow for both. None of this
-   reaches the store page: its week is as Part 4 drew it. */
+   already says aria-current="date". The hours never break here. None of
+   this reaches the store page: its week is as Part 4 drew it.
+
+   Part 4e. TODAY sits under its hours at every width (the owner,
+   2026-10-07): Part 4d put it beside them wherever both fitted, which
+   made the bubble wider than anything else in it needed. 3 px over it
+   and 4 px under - 2 px more under than Part 4d's narrow cards gave it,
+   so that it reads with its own hours and not with the next day's. */
 #map_sidebar .avalon-hours--card .avalon-hours__week,
 .slp_info_bubble .avalon-hours--card .avalon-hours__week {
   width: calc(100% + 15px);
@@ -603,8 +607,8 @@ a.avalon-email:focus-visible {
 .slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after {
   content: "TODAY";
   content: "TODAY" / "";
-  display: inline-block;
-  margin-left: 12px;
+  display: block;
+  margin: 3px 0 4px;
   color: var(--avalon-hours-today);
   font-size: 11px;
   font-weight: 600;
@@ -626,38 +630,29 @@ a.avalon-email:focus-visible {
   }
 }
 
-/* Narrow cards and bubbles. The card's grid and the bubble's are size
-   containers for these two rules alone; a browser without container
-   queries keeps the week as above, TODAY wrapping where it must.
+/* Narrow cards. The card's grid is a size container for this one rule; a
+   browser without container queries keeps the week as above.
 
-   Under 320 px of content - a phone upright, a phone held sideways, the
-   bubble on a phone - TODAY does not fit beside the hours, so it takes
-   the line under them, flush with them, rather than wrap with a 12 px
-   indent.
+   Under 250 px of content - the results column of a phone held sideways,
+   769 to about 880 px wide, a 320 px phone upright - the week does not
+   fit beside the labels, so the opened week takes the whole width under
+   the Hours: line, its day names 15 px in, rather than run into the
+   padding or past the edge. Measured on Aura 2026-10-07, with TODAY
+   beside its hours as Part 4d had it: the week needed 193 px, and has
+   the content less 50 to 56 px beside the labels.
 
-   Under 250 px - the results column of a phone held sideways, 769 to
-   about 880 px wide, a 320 px phone upright, the bubble on one - the week
-   does not fit beside the labels either, so the opened week takes the
-   whole width under the Hours: line, its day names 15 px in, rather than
-   run into the padding or past the edge. Measured on Aura 2026-10-07: the
-   week needs 193 px, and has the content less 50 to 56 px beside the
-   labels. */
-#map_sidebar .results_wrapper .results_entry,
-.slp_info_bubble .avalon-bubble__info {
+   Part 4e. The cards alone. The bubble is as wide as its content now
+   (the theme), and what is sized by its content cannot be a size
+   container as well: contained, its lines would no longer count towards
+   the bubble's width. Nor does it need to be: the theme keeps the bubble
+   280 px wide at least, and a phone has none. Part 4d's 320 px rule went
+   when TODAY moved under its hours for good. */
+#map_sidebar .results_wrapper .results_entry {
   container-type: inline-size;
 }
 
-@container (max-width: 320px) {
-  #map_sidebar .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after,
-  .slp_info_bubble .avalon-hours--card .avalon-hours__week tbody > tr.is-today > td::after {
-    display: block;
-    margin: 3px 0 2px;
-  }
-}
-
 @container (max-width: 250px) {
-  #map_sidebar .avalon-hours--card .avalon-hours__week,
-  .slp_info_bubble .avalon-hours--card .avalon-hours__week {
+  #map_sidebar .avalon-hours--card .avalon-hours__week {
     width: 100cqw;
     margin-left: calc(100% - 100cqw);
   }
@@ -665,19 +660,20 @@ a.avalon-email:focus-visible {
 
 /* ----------------------------------- Part 4d: the bubble, in three parts */
 
-/* The name; the dealer's lines - the card's grid - in a body that
-   scrolls on a phone, with a fade at its foot while there is more below
-   (slp_avalon.js); then the two buttons in a row of their own under the
-   body, where they stay while it scrolls. slp_avalon wraps Avalon's fields
-   in .avalon-bubble__info and SLP's two button spans in
+/* The name; the dealer's lines - the card's grid - in the body; then the
+   two buttons in a row of their own under it. slp_avalon wraps Avalon's
+   fields in .avalon-bubble__info and SLP's two button spans in
    .avalon-bubble__actions (slp_js_options at 120), so SLP's own lines -
    fax, description, its hours, image, tags, all empty on Aura - stay out
    of the grid, and the spans keep the ids main.js and slp_avalon.js read.
-   15 px text and a 20 px name at every width; a long address takes a
-   third line 105 times of Aura's 313 at 320 px, 12 at 360, 7 at 375, 4
-   at 390 and once from 414 up, where Part 4c's icons gave 13, 10, 1 and
-   1 (2026-10-07). The frame - its colour, corners, width, shadow and
-   tail - is the theme's. */
+   15 px text and a 20 px name at every width. The frame - its colour,
+   corners, width, shadow and tail - is the theme's.
+
+   Part 4e. A phone has no bubble (slp_avalon.js), so the body that
+   scrolled there, its scrollbar and the fade at its foot are gone, and
+   the count Part 4d took of long addresses in a phone's bubble no longer
+   describes anything. On a larger screen the bubble grows as it always
+   did, and Google's own box scrolls it where a map is too short. */
 .slp_info_bubble #slp_bubble_name {
   display: block;
   margin: 0;
@@ -736,48 +732,27 @@ a.avalon-email:focus-visible {
   display: none;
 }
 
-/* The fade: the bubble's black over the body's last 28 px while there is
-   more below. slp_avalon.js sets .is-more; at the end of the scroll, and
-   wherever nothing scrolls, it is not drawn. */
-.slp_info_bubble .sl_popup_contact_info::after {
-  content: "";
-  display: block;
-  position: sticky;
-  bottom: 0;
-  height: 28px;
-  margin-top: -28px;
-  background: linear-gradient(transparent, var(--avalon-bubble-bg, #080808));
-  pointer-events: none;
-  visibility: hidden;
+/* ------------------------------------------ Part 4e: the chosen card */
+
+/* Part 4e. On a phone - upright, or sideways and short - a pin opens no
+   bubble: slp_avalon.js brings the dealer's card into view, marked
+   .active - the theme's ring - and puts .avalon-flash on it for a
+   second, so the eye finds it: the card's own background reached from a
+   lighter one, twice. The lighter one is a custom property, for a site
+   on a light background to set. Where the visitor has asked for less
+   motion, no flash: the ring alone. */
+@keyframes avalon-flash {
+  from {
+    background-color: var(--avalon-flash, rgba(255, 255, 255, 0.34));
+  }
 }
 
-.slp_info_bubble .sl_popup_contact_info.is-more::after {
-  visibility: visible;
+#map_sidebar .results_wrapper.avalon-flash {
+  animation: avalon-flash 0.5s ease-out 2;
 }
 
-/* On a phone - upright, or sideways and short - the body is at most
-   250 px or 45% of the screen's height, and scrolls, with a thin visible
-   scrollbar; the buttons stay under it. On a larger screen the bubble
-   grows as it did. */
-@media (max-width: 767px), (max-height: 500px) {
-  .slp_info_bubble .sl_popup_contact_info {
-    max-height: min(250px, 45vh);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.45) transparent;
-  }
-
-  .slp_info_bubble .sl_popup_contact_info::-webkit-scrollbar {
-    width: 5px;
-  }
-
-  .slp_info_bubble .sl_popup_contact_info::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.45);
-    border-radius: 3px;
-  }
-
-  .slp_info_bubble .sl_popup_contact_info::-webkit-scrollbar-track {
-    background: transparent;
+@media (prefers-reduced-motion: reduce) {
+  #map_sidebar .results_wrapper.avalon-flash {
+    animation: none;
   }
 }
