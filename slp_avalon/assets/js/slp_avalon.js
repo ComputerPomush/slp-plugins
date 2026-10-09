@@ -1527,13 +1527,13 @@
    * THE HOVERED PIN. A pin under the pointer, or whose bubble is open,
    * shows the hover icon - slplus.options.avalon_map_hover_icon, set by
    * slp_avalon - and sits above the other pins. Without the option it is
-   * only raised.
+   * only raised. A numbered pin (Part 4f) lights as NUMBERS, below, says.
    *
    * THE CONTROLS. As on a store page's map (avalon_map_location): zoom, Map
    * and Satellite, Street View, full screen, and no camera control. Set
    * after SLP's map_options filter, so SLP Experience's
    * map_options_mapTypeControl ("0" on Aura) no longer hides Map and
-   * Satellite.
+   * Satellite. From Part 4f the zoom is ours: THE MAP'S BUTTONS, below.
    *
    * THE CHOSEN CARD (Part 4d). The dealer whose bubble was chosen - by a
    * click, a tap or a key on its pin or card, or into the bubble - has its
@@ -1578,6 +1578,50 @@
    * least. Part 4d's fade went with the phone's bubble: nothing of ours
    * scrolls in a bubble now.
    *
+   * THE MAP'S BUTTONS (Part 4f). Reset, and our own + and -, where
+   * Google's zoom stood. Google's zoom is off (controls()): nothing can
+   * sit beside Google's own, and Reset belongs beside - (the owner,
+   * 2026-10-07). The Pegman stays Google's, above them. On a desktop or a
+   * tablet they are one control at the right foot of the map: Reset, then
+   * + over -, their feet in line, in Google's look (avalon-hours.css). On
+   * a phone Reset stands alone in the top right corner, Google's full
+   * screen under it, and + and - stay at the foot; a window resized
+   * across a phone's size, or full screen coming or going, moves it. Reset
+   * shows once a search has drawn a view, and takes the map back to it at
+   * once: the view as SLP and v0.0.25 drew it - the dealers and the
+   * search's point fitted, then one zoom out - read as soon as
+   * markers_dropped has been handled (the probe read it there and at the
+   * map's idle: the same). On a map of another size since, the dealers
+   * are fitted again by the same rules, so that every one shows. The
+   * map's view only: a dealer chosen, a lit pin, an open bubble, the map
+   * type and the list stay as they are; a search refused, or one that
+   * failed, keeps the last view. + and - zoom by one, between the least
+   * zoom the map allows (SLP's 1) and the most its map type does; at
+   * either end the button is dimmed - aria-disabled, so focus stays on it.
+   * Their names are Google's, Zoom in and Zoom out; Reset's is "Reset map
+   * view". Where the map has no controls to add to, Google's zoom comes
+   * back and there is no Reset.
+   *
+   * NUMBERS (Part 4f). Where slp_avalon sets avalon_map_number_icon, each
+   * search's dealers are numbered 1 to n in SLP's order - the cards' as
+   * drawn - and a number stays with its dealer when Part 4e moves a card.
+   * A pin becomes that icon with its number on the head, at (15, 15) of
+   * the 30 x 40 art: black, the page's own font, bold, 13 px - 4.80:1 on
+   * the pink pin, 21:1 on the white one (black: the owner, 2026-10-08,
+   * for WCAG AA). Lit, it is avalon_map_number_hover_icon with the same
+   * number; without that option, only raised. Its title, which Google
+   * makes its name, is "Number 4, <dealer>". The card's heading starts
+   * with the number in a disc, and reads "Number 4, " before the name:
+   * "Number " and the comma are hidden on screen; the link is as it was.
+   * The bubble and the search's own pin have no number. Without the
+   * option nothing is numbered and the pins are SLP's.
+   *
+   * FOCUS AFTER NARROWING (Part 4f). A window narrowed to a phone's with
+   * focus in a chosen dealer's bubble gives that focus to the dealer's
+   * card once Google's close event has come - after close() has returned,
+   * 23 ms later on DEV - or 0.3 s on, whichever is first: so that
+   * nothing Google does with focus as its bubble goes comes after it.
+   *
    * Part 4c's Font Awesome labels went with Part 4d: words on every
    * screen, the owner's decision of 2026-10-07.
    * ================================================================== */
@@ -1587,6 +1631,10 @@
     var FLASH_MS = 1100;
     var GAP = 8;
     var PHONE = "(max-width: 767px), (max-height: 500px)";
+    //Part 4f. Where a numbered pin's number sits: the middle of the head
+    //of the 30 x 40 art, x and y, in px from its top left. Measured on DEV
+    //(the probe, 2026-10-08): the number's centre 0.2 px from it.
+    var HEAD = 15;
 
     var st = {
       cm: null,           //SLP's map object, cslmap
@@ -1609,7 +1657,14 @@
       wantFocus: false,   //move focus in once the content is in the page
       from: null,         //where focus was when the bubble was chosen
       back: null,         //where focus was before it moved in
-      icon: null          //the hover icon, resolved; "" for none
+      icon: null,         //the hover icon, resolved; "" for none
+      nicon: null,        //Part 4f. the numbered pin, resolved; "" for none, and no numbers
+      nlit: null,         //Part 4f. the numbered pin lit, resolved; "" for none
+      font: null,         //Part 4f. the numbers' font: the page's
+      view: null,         //Part 4f. { c, z, w, h, fit, n }: the view the latest search drew
+      vt: 0,              //Part 4f. the pending read of that view
+      ctl: null,          //Part 4f. the map's buttons: { group, zoom, reset, zin, zout, corner, at }
+      closing: 0          //Part 4f. the pending focus to the card, after Google's close event
     };
 
     function has_class(n, name) {
@@ -2023,10 +2078,284 @@
       }
     }
 
+    //Part 4f. THE MAP'S BUTTONS, in the header above: the view the latest
+    //search drew, read once markers_dropped has been handled - SLP's
+    //fitBounds() and zoom tweak, then v0.0.25's zoom out by one. fit: the
+    //search found dealers, so SLP's bounds are its own.
+    function take() {
+      st.vt = 0;
+      var cm = st.cm;
+      var g = cm && cm.gmap;
+      var d = g && typeof g.getDiv === "function" ? g.getDiv() : null;
+      var c = g && typeof g.getCenter === "function" ? g.getCenter() : null;
+      var z = g && typeof g.getZoom === "function" ? g.getZoom() : NaN;
+      if (!d || !c || typeof z !== "number" || isNaN(z)) {
+        return;
+      }
+      var n = (cm.markers || []).length;
+      st.view = { c: c, z: z, w: d.clientWidth, h: d.clientHeight, fit: n > 0 && !!cm.bounds, n: n };
+      place_reset();
+    }
+
+    //Part 4f. The dealers fitted again, by SLP's rules (slp_core.js
+    //putMarkers()) and then v0.0.25's zoom out by one.
+    function refit(cm, n) {
+      var g = cm.gmap;
+      var o = (typeof slplus !== "undefined" && slplus && slplus.options) || {};
+      var z;
+      g.fitBounds(cm.bounds);
+      if (o.no_autozoom === "1") {
+        z = parseInt(o.zoom_level, 10);
+      } else {
+        z = g.getZoom() - (parseInt(o.zoom_tweak, 10) || 0);
+        if (n < 2) {
+          z = Math.min(z, 15);
+        }
+      }
+      if (!isNaN(z)) {
+        g.setZoom(z);
+      }
+      g.setZoom(g.getZoom() - 1);
+    }
+
+    //Part 4f. Reset: back to that view, at once - on a map of another size
+    //since, the dealers fitted again, and that view kept from then on.
+    function reset() {
+      var v = st.view;
+      var cm = st.cm;
+      var g = cm && cm.gmap;
+      var d = g && typeof g.getDiv === "function" ? g.getDiv() : null;
+      if (!v || !d) {
+        return;
+      }
+      if (v.fit && (d.clientWidth !== v.w || d.clientHeight !== v.h)) {
+        refit(cm, v.n);
+        take();
+        return;
+      }
+      g.setCenter(v.c);
+      g.setZoom(v.z);
+    }
+
+    //Part 4f. The least zoom the map allows, and the most its map type
+    //does: SLP builds the map with minZoom 1; a type says its own most.
+    function limits(g) {
+      var lo = 0;
+      var hi = 22;
+      try {
+        var t = g.mapTypes && typeof g.mapTypes.get === "function" ? g.mapTypes.get(g.getMapTypeId()) : null;
+        var mn = typeof g.get === "function" ? g.get("minZoom") : undefined;
+        var mx = typeof g.get === "function" ? g.get("maxZoom") : undefined;
+        lo = typeof mn === "number" ? mn : (t && typeof t.minZoom === "number" ? t.minZoom : 0);
+        hi = typeof mx === "number" ? mx : (t && typeof t.maxZoom === "number" ? t.maxZoom : 22);
+      } catch (x) {
+        //A map that cannot say: 0 to 22, Google's own range.
+      }
+      return { min: lo, max: hi };
+    }
+
+    //Part 4f. + and -: one zoom in or out, never past either end.
+    function zoom_by(dz) {
+      var g = st.cm && st.cm.gmap;
+      var z = g && typeof g.getZoom === "function" ? g.getZoom() : NaN;
+      if (typeof z !== "number" || isNaN(z)) {
+        return;
+      }
+      var lim = limits(g);
+      var to = Math.max(lim.min, Math.min(lim.max, Math.round(z) + dz));
+      if (to !== z) {
+        g.setZoom(to);
+      }
+    }
+
+    //Part 4f. A button dimmed at its end of the zoom - or not.
+    function dim(b, off) {
+      if (off) {
+        b.setAttribute("aria-disabled", "true");
+      } else if (typeof b.removeAttribute === "function") {
+        b.removeAttribute("aria-disabled");
+      }
+    }
+
+    //Part 4f. + and - dimmed at either end, as the zoom or the map type
+    //changes.
+    function ends() {
+      var c = st.ctl;
+      var g = st.cm && st.cm.gmap;
+      var z = g && typeof g.getZoom === "function" ? g.getZoom() : NaN;
+      if (!c || typeof z !== "number" || isNaN(z)) {
+        return;
+      }
+      var lim = limits(g);
+      dim(c.zin, z >= lim.max);
+      dim(c.zout, z <= lim.min);
+    }
+
+    //Part 4f. An element of ours, by tag and class.
+    function make(tag, name) {
+      var n = document.createElement(tag);
+      n.className = name;
+      return n;
+    }
+
+    //Part 4f. A button of ours: its name, which is its tooltip too, and
+    //the text it shows, if any. type="button": nothing here submits.
+    function button(name, label, text) {
+      var b = make("button", name);
+      b.setAttribute("type", "button");
+      b.setAttribute("aria-label", label);
+      b.setAttribute("title", label);
+      if (text) {
+        b.appendChild(document.createTextNode(text));
+      }
+      return b;
+    }
+
+    //Part 4f. One of our controls into the list Google lays a corner of
+    //the map out from, or out of it - and out and in again when it is
+    //there already, so that Google lays it out at its new size. Focus in
+    //it, which the move takes away, is given back.
+    function dock(pos, n, on) {
+      var g = st.cm.gmap;
+      var list = g.controls[pos];
+      var a = document.activeElement;
+      var had = !!a && a !== document.body && typeof n.contains === "function" && n.contains(a);
+      var all = list.getArray();
+      for (var i = all.length - 1; i >= 0; i--) {
+        if (all[i] === n) {
+          list.removeAt(i);
+        }
+      }
+      if (on) {
+        list.push(n);
+      }
+      if (had && document.activeElement !== a && document.body.contains(a)) {
+        try {
+          a.focus({ preventScroll: true });
+        } catch (x) {
+          //Refused: focus stays where the move left it.
+        }
+      }
+    }
+
+    //Part 4f. Reset where the layout wants it: in our group at the foot,
+    //before + and -; on a phone alone, top right; nowhere until a search
+    //has drawn a view to go back to.
+    function place_reset() {
+      var c = st.ctl;
+      if (!c) {
+        return;
+      }
+      var at = !st.view ? "" : phone() ? "corner" : "group";
+      if (at === c.at) {
+        return;
+      }
+      var P = google.maps.ControlPosition;
+      var was = c.at;
+      var a = document.activeElement;
+      var had = a === c.reset;
+      if (c.reset.parentNode) {
+        c.reset.parentNode.removeChild(c.reset);
+      }
+      if (at === "group") {
+        c.group.insertBefore(c.reset, c.zoom);
+      } else if (at === "corner") {
+        c.corner.appendChild(c.reset);
+      }
+      c.at = at;
+      if (was === "corner" || at === "corner") {
+        dock(P.TOP_RIGHT, c.corner, at === "corner");
+      }
+      if (was === "group" || at === "group") {
+        dock(P.RIGHT_BOTTOM, c.group, true);
+      }
+      if (had && at && document.activeElement !== c.reset) {
+        try {
+          c.reset.focus({ preventScroll: true });
+        } catch (x) {
+          //As above.
+        }
+      }
+    }
+
+    //Part 4f. The buttons made, once, as the map is built: + and - at the
+    //map's right foot, where Google's zoom stood - index -1 puts them under
+    //Google's other controls there, the Pegman - with Reset to come.
+    function buttons(cm) {
+      var g = cm.gmap;
+      var P = google.maps.ControlPosition;
+      if (!P || !g.controls || !g.controls[P.RIGHT_BOTTOM] || !g.controls[P.TOP_RIGHT] ||
+          typeof g.controls[P.RIGHT_BOTTOM].getArray !== "function") {
+        if (typeof g.setOptions === "function") {
+          g.setOptions({ zoomControl: true });
+        }
+        return;
+      }
+      var c = {
+        group: make("div", "avalon-mapctl"),
+        zoom: make("div", "avalon-mapctl__zoom"),
+        corner: make("div", "avalon-mapctl avalon-mapctl--corner"),
+        reset: button("avalon-mapctl__reset", "Reset map view", "Reset"),
+        zin: button("avalon-mapctl__in", "Zoom in", ""),
+        zout: button("avalon-mapctl__out", "Zoom out", ""),
+        at: ""
+      };
+      c.zoom.appendChild(c.zin);
+      c.zoom.appendChild(make("div", "avalon-mapctl__rule"));
+      c.zoom.appendChild(c.zout);
+      c.group.appendChild(c.zoom);
+      c.group.index = -1;
+      c.reset.addEventListener("click", reset, false);
+      c.zin.addEventListener("click", function () {
+        zoom_by(1);
+      }, false);
+      c.zout.addEventListener("click", function () {
+        zoom_by(-1);
+      }, false);
+      st.ctl = c;
+      g.controls[P.RIGHT_BOTTOM].push(c.group);
+      google.maps.event.addListener(g, "zoom_changed", ends);
+      google.maps.event.addListener(g, "maptypeid_changed", ends);
+      ends();
+      place_reset();
+    }
+
+    //Part 4f. FOCUS AFTER NARROWING, in the header above: to_card() once
+    //Google's close event has come, or CLOSE_MS on - and only while that
+    //dealer is still the one chosen, with no bubble.
+    function to_card_after(iw, e) {
+      var done = false;
+      var h = null;
+      var go = function () {
+        if (done) {
+          return;
+        }
+        done = true;
+        clearTimeout(st.closing);
+        st.closing = 0;
+        if (h) {
+          google.maps.event.removeListener(h);
+        }
+        if (st.current === e && st.pinned && !st.open) {
+          to_card(e);
+        }
+      };
+      clearTimeout(st.closing);
+      try {
+        h = google.maps.event.addListenerOnce(iw, "close", function () {
+          setTimeout(go, 0);
+        });
+      } catch (x) {
+        h = null;
+      }
+      st.closing = setTimeout(go, CLOSE_MS);
+    }
+
     function controls(o) {
       if (o && typeof o === "object") {
         o.cameraControl = false;
-        o.zoomControl = true;
+        //Part 4f. Ours instead: THE MAP'S BUTTONS, in the header above.
+        o.zoomControl = false;
         o.mapTypeControl = true;
         o.streetViewControl = true;
         o.fullscreenControl = true;
@@ -2034,23 +2363,101 @@
       return o;
     }
 
+    //Part 4f. One of slp_avalon's icon options, resolved; "" for none.
+    function option_icon(name) {
+      var v = "";
+      try {
+        v = String((slplus.options && slplus.options[name]) || "");
+      } catch (x) {
+        v = "";
+      }
+      if (v) {
+        //A path from the site's root, resolved against the page.
+        var a = document.createElement("a");
+        a.href = v;
+        v = a.href;
+      }
+      return v;
+    }
+
     function hover_icon() {
       if (st.icon === null) {
-        var v = "";
-        try {
-          v = String((slplus.options && slplus.options.avalon_map_hover_icon) || "");
-        } catch (x) {
-          v = "";
-        }
-        if (v) {
-          //A path from the site's root, resolved against the page.
-          var a = document.createElement("a");
-          a.href = v;
-          v = a.href;
-        }
-        st.icon = v;
+        st.icon = option_icon("avalon_map_hover_icon");
       }
       return st.icon;
+    }
+
+    //Part 4f. NUMBERS, in the header above: the numbered pin, or "" - and
+    //then no numbers at all.
+    function numbered() {
+      if (st.nicon === null) {
+        st.nicon = option_icon("avalon_map_number_icon");
+        st.nlit = st.nicon ? option_icon("avalon_map_number_hover_icon") : "";
+      }
+      return st.nicon;
+    }
+
+    //Part 4f. A numbered pin's icon: the art, with its number's centre in
+    //the middle of the head.
+    function pin(url) {
+      var o = { url: url };
+      try {
+        o.labelOrigin = new google.maps.Point(HEAD, HEAD);
+      } catch (x) {
+        //No Point: the number where Google centres a label.
+      }
+      return o;
+    }
+
+    //Part 4f. The page's own font - its body's - for the numbers.
+    function font() {
+      if (st.font === null) {
+        var f = "";
+        try {
+          f = String(window.getComputedStyle(document.body).fontFamily || "");
+        } catch (x) {
+          f = "";
+        }
+        st.font = (f ? f + ", " : "") + "Arial, sans-serif";
+      }
+      return st.font;
+    }
+
+    //Part 4f. Hidden on screen, read by a screen reader.
+    function unseen(t) {
+      var s = make("span", "avalon-num__sr");
+      s.appendChild(document.createTextNode(t));
+      return s;
+    }
+
+    //Part 4f. A dealer numbered: its pin, then its card. A card numbered
+    //before - the same results bound again - is numbered afresh.
+    function number(e, n) {
+      var g = e.marker.__gmarker;
+      var name = name_of(e.info);
+      e.n = n;
+      try {
+        g.setIcon(pin(st.nicon));
+        g.setLabel({ text: String(n), color: "#000000", fontFamily: font(), fontSize: "13px", fontWeight: "700",
+                     className: "avalon-pin-num" });
+        g.setTitle("Number " + n + (name ? ", " + name : ""));
+      } catch (x) {
+        //A pin that takes none of it stays as SLP drew it.
+      }
+      var c = card_of(e);
+      var h = c && typeof c.querySelector === "function" ? c.querySelector(".store_locator_name") : null;
+      if (!h || typeof h.insertBefore !== "function") {
+        return;
+      }
+      var old = h.querySelector(".avalon-num");
+      if (old && old.parentNode) {
+        old.parentNode.removeChild(old);
+      }
+      var s = make("span", "avalon-num");
+      s.appendChild(unseen("Number "));
+      s.appendChild(document.createTextNode(String(n)));
+      s.appendChild(unseen(", "));
+      h.insertBefore(s, h.firstChild);
     }
 
     function hovered(e) {
@@ -2058,17 +2465,18 @@
     }
 
     //A pin lit: the hover icon, above the other pins; unlit: as SLP drew it.
+    //Part 4f: a numbered pin, the numbered pin lit, its number kept.
     function lit(e, on) {
       var g = e && e.marker && e.marker.__gmarker;
       if (!g || !!e.lit === !!on) {
         return;
       }
-      var url = hover_icon();
+      var url = e.n ? st.nlit : hover_icon();
       if (on) {
         e.icon = g.getIcon();
         e.z = g.getZIndex();
         if (url) {
-          g.setIcon(url);
+          g.setIcon(e.n ? pin(url) : url);
         }
         g.setZIndex((google.maps.Marker.MAX_ZINDEX || 1000000) + 1);
       } else {
@@ -2354,8 +2762,13 @@
     //closes, to the link that opened it, which taking the bubble out of
     //the page would lose - and it falls back to the search box. So it
     //looks again until the form has closed.
+    //
+    //Part 4f. Reset goes where the layout now wants it first, whatever
+    //else there is to do; the focus the bubble had goes to the card once
+    //Google's close event has come (FOCUS AFTER NARROWING, above).
     function resized() {
       st.rs = 0;
+      place_reset();
       var cm = st.cm;
       var e = st.current;
       if (!cm || !e || !e.marker || !e.marker.__gmarker) {
@@ -2393,7 +2806,7 @@
       }
       place(e, true);
       if (had) {
-        to_card(e);
+        to_card_after(cm.infowindow, e);
       }
     }
 
@@ -2576,6 +2989,8 @@
         .on("mouseleave.avalonMap", "#map_sidebar .results_wrapper", function () {
           leave(card(this), "card");
         });
+      //Part 4f. The map's buttons, once.
+      buttons(cm);
     }
 
     function info_of(list, m, i) {
@@ -2600,7 +3015,9 @@
     }
 
     //Each search: the old bubble closed, the new pins hooked, by location
-    //id - SLP's own order only when an id is missing.
+    //id - SLP's own order only when an id is missing. Part 4f: numbered,
+    //in SLP's order, where there are numbers; the view to reset to read
+    //once markers_dropped has been handled.
     function bind(cm, list) {
       attach(cm);
       cancel();
@@ -2612,6 +3029,7 @@
       st.overCard = null;
       st.byId = {};
       var markers = (cm && cm.markers) || [];
+      var n = 0;
       for (var i = 0; i < markers.length; i++) {
         var m = markers[i];
         var info = info_of(list, m, i);
@@ -2621,10 +3039,16 @@
         var e = { id: String(info.id), marker: m, info: info, lit: false };
         st.byId[e.id] = e;
         hook(e);
+        if (numbered()) {
+          number(e, ++n);
+        }
       }
-      if (hover_icon() && typeof Image === "function") {
-        new Image().src = hover_icon();
+      var icon = numbered() ? st.nlit : hover_icon();
+      if (icon && typeof Image === "function") {
+        new Image().src = icon;
       }
+      clearTimeout(st.vt);
+      st.vt = setTimeout(take, 0);
     }
 
     return {

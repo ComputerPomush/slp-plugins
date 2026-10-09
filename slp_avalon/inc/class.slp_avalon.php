@@ -402,6 +402,13 @@ if (!class_exists('SLP_Avalon')){
             // already.
             add_filter('slp_js_options', array(self::$instance,'avalon_js_options_frame'), 120, 1);
             //
+            // v0.0.27 Part 4f. Reset and numbered pins on the find-a-dealer
+            // map, all slp_avalon.js's: the numbered pins' two URLs ride in
+            // the script options beside the hover pin's, from Part 4c's
+            // avalon_js_options_map() at 110, so nothing new is registered,
+            // and every new selector names #map_sidebar or .gm-style, which
+            // Part 4c put on WP Rocket's safelist.
+            //
             // WP-CLI, inline and guarded - deliberately NOT a new file.
             // A require_once of a file that has not landed yet is fatal,
             // and Part 2 already paid that deploy-ordering tax once.
@@ -5432,6 +5439,49 @@ if (!class_exists('SLP_Avalon')){
         }
 
         /**
+         * v0.0.27 Part 4f. The numbered pin's URL, or ''.
+         *
+         * The option avalon_map_number_icon: the dealer's pin at rest on the
+         * find-a-dealer map, with its number drawn on its head by
+         * slp_avalon.js (30 x 40 art, the number at 15, 15). Set, the
+         * dealers of each search are numbered 1 to n on the pins and the
+         * cards; empty or not a URL, there are no numbers and the pins are
+         * SLP's. Read as avalon_map_hover_icon() reads its own. Store
+         * pages are untouched: their map prints map_end_icon.
+         */
+        public static function avalon_map_number_icon(){
+            return self::avalon_map_icon_url( 'avalon_map_number_icon' );
+        }
+
+        /**
+         * v0.0.27 Part 4f. The numbered pin lit - hovered, chosen, its
+         * bubble open - or ''. The option avalon_map_number_hover_icon,
+         * read the same way. Without it a numbered pin lit is only raised.
+         */
+        public static function avalon_map_number_hover_icon(){
+            return self::avalon_map_icon_url( 'avalon_map_number_hover_icon' );
+        }
+
+        /**
+         * v0.0.27 Part 4f. An icon option as a URL, or '': an http(s) URL,
+         * or a path from the site's root, which slp_avalon.js resolves
+         * against the page. Anything else, and an option that is not a
+         * string, is none.
+         */
+        private static function avalon_map_icon_url( $name ){
+            $v = get_option( $name, '' );
+            if ( ! is_string( $v ) ) {
+                return '';
+            }
+            $v = trim( $v );
+            if ( '' === $v || 0 === strpos( $v, '//' )
+                 || ( '/' !== $v[0] && ! preg_match( '#^https?://#i', $v ) ) ) {
+                return '';
+            }
+            return (string) esc_url_raw( $v, array( 'http', 'https' ) );
+        }
+
+        /**
          * v0.0.27 Part 4c. The layouts and the hover pin, in the script options.
          *
          * On slp_js_options at 110, after Part 4's and Part 4b's callbacks
@@ -5440,6 +5490,9 @@ if (!class_exists('SLP_Avalon')){
          * hover pin's URL rides along as avalon_map_hover_icon - always
          * set, '' when there is none. Layouts that are not strings, and
          * options that are not an array, pass through.
+         *
+         * Part 4f. The numbered pins ride along the same way, as
+         * avalon_map_number_icon and avalon_map_number_hover_icon.
          */
         public function avalon_js_options_map( $options ){
             if ( ! is_array( $options ) ) {
@@ -5452,6 +5505,8 @@ if (!class_exists('SLP_Avalon')){
                 $options['bubblelayout'] = $this->avalon_bubble_layout_address( $options['bubblelayout'] );
             }
             $options['avalon_map_hover_icon'] = self::avalon_map_hover_icon();
+            $options['avalon_map_number_icon'] = self::avalon_map_number_icon();
+            $options['avalon_map_number_hover_icon'] = self::avalon_map_number_hover_icon();
             return $options;
         }
 

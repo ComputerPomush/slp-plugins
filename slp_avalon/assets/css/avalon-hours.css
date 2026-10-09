@@ -1,6 +1,6 @@
 /*!
  * avalon-hours.css
- * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4e.
+ * SLP Dealer Guard (slp_avalon) v0.0.27 Part 4f.
  *
  * Google-style opening hours on store pages, find-a-dealer result cards and
  * the map's info bubble. One stylesheet for every surface, shipped with the
@@ -64,6 +64,15 @@
  * scrollbar and the fade at its foot are gone, and Part 4c's 14 px email
  * with them. The bubble is as wide as its content (the theme), so it is no
  * longer a size container. Open stays green.
+ *
+ * PART 4f, after the first rule and at the end of the file: the owner's
+ * decisions of 2026-10-07 and 2026-10-08. .avalon-hours made the box its
+ * hidden "Hours: " is placed in - left to the page, the span sat where an
+ * unscrolled list would put it and stretched the page below its footer
+ * (the white bar on DEV, 2026-10-08). The numbered cards' disc, in the
+ * primary colour with a black number, as on the map's pins. Reset and
+ * the map's own + and -, in Google's look: slp_avalon.js turns Google's
+ * zoom off and puts these where it stood.
  */
 
 .avalon-hours {
@@ -71,6 +80,16 @@
   --avalon-hours-closed: var(--e-global-color-primary, var(--primary-color, #e7167c));
   --avalon-hours-soon: #fcad70;
   --avalon-hours-today: var(--e-global-color-primary, var(--primary-color, #e7167c));
+}
+
+/* Part 4f. The box the hidden "Hours: " (.avalon-hours__sr, in Part 4d's
+   block) is placed in. Without it the nearest was the theme's #sl_div, and
+   for a card below what the results box shows, the span sat outside the
+   box's clipping, where the unscrolled list would put it - up to 211 px
+   below the footer on DEV (1707 x 839, 2026-10-08), where nothing paints.
+   A box of its own for every surface: a card, the bubble, a store page. */
+.avalon-hours {
+  position: relative;
 }
 
 /* ------------------------------------------------------------ status line */
@@ -755,4 +774,181 @@ a.avalon-email:focus-visible {
   #map_sidebar .results_wrapper.avalon-flash {
     animation: none;
   }
+}
+
+/* ----------------------------------------- Part 4f: the numbered cards */
+
+/* Part 4f. Where the map's pins are numbered (slp_avalon.js, NUMBERS),
+   each card's heading starts with the same number, in a disc of the
+   site's primary colour with the number in black, bold - 4.80:1 on Aura's
+   pink, as on the pins (the owner, 2026-10-08) - round, and a pill for
+   two digits; before the name, on its first line. Screen readers hear
+   "Number 4, " before the name: the word and the comma are in the
+   markup, hidden on screen as the hidden "Hours: " is, and the disc is
+   the box they are placed in, so that they cannot stretch the page
+   either. Two custom properties for a site on another background.
+
+   The disc's middle on the middle of the name's capitals, and the line
+   no taller for it: measured on DEV's cards in Chromium (2026-10-08),
+   with the page's Figtree - the capitals' middle 13.6 px under the
+   line's top at 24 px, 12 px at 20 px (1024 px and under), and the
+   disc's middle 14 and 12; the heading 28.8 and 24 px high with the
+   disc or without it. The gap after it is the card's column gap. */
+#map_sidebar .results_wrapper .avalon-num {
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: 26px;
+  height: 26px;
+  margin: 1px 10px -1px 0;
+  padding: 0 7px;
+  border-radius: 13px;
+  background-color: var(--avalon-num-bg, var(--e-global-color-primary, var(--primary-color, #e7167c)));
+  color: var(--avalon-num-text, #000);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 26px;
+  text-align: center;
+  vertical-align: top;
+}
+
+@media (max-width: 1024px) {
+  #map_sidebar .results_wrapper .avalon-num {
+    margin: -1px 8px -3px 0;
+  }
+}
+
+#map_sidebar .results_wrapper .avalon-num__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ----------------------------------------- Part 4f: the map's buttons */
+
+/* Part 4f. Reset, and + and -, where Google's zoom stood (slp_avalon.js,
+   THE MAP'S BUTTONS), in Google's look as the probe read it on DEV on
+   2026-10-08: white, 2 px corners, Google's shadow, 40 px buttons, a 1 px
+   rule 30 px wide between + and -, Reset in the Map and Satellite
+   buttons' type - Roboto 500, 18 px - and 10 px from the map's edges and
+   from each other, as Google's own controls stand. Each button sets its
+   colours for every state: the theme's button:hover and button:focus
+   (0-1-1) paint any button pink, and these are 1-3-1 and up. A keyboard
+   ring, black, inside the white button, so that it shows over any map;
+   none for a pointer. + and - dimmed at either end of the zoom. */
+#map .gm-style .avalon-mapctl {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 10px;
+}
+
+#map .gm-style .avalon-mapctl__zoom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 2px;
+  background-color: #fff;
+  box-shadow: rgba(0, 0, 0, 0.3) 0 1px 4px -1px;
+}
+
+#map .gm-style .avalon-mapctl__rule {
+  width: 30px;
+  height: 1px;
+  background-color: #e6e6e6;
+}
+
+#map .gm-style .avalon-mapctl button {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background-color: #fff;
+  box-shadow: none;
+  color: #666;
+  cursor: pointer;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 40px;
+  letter-spacing: normal;
+  text-align: center;
+  text-transform: none;
+  white-space: nowrap;
+  user-select: none;
+  transition: none;
+}
+
+#map .gm-style .avalon-mapctl .avalon-mapctl__reset {
+  width: auto;
+  padding: 0 17px;
+  box-shadow: rgba(0, 0, 0, 0.3) 0 1px 4px -1px;
+  color: #565656;
+}
+
+/* On a phone, Reset alone in the top right corner: a little narrower, so
+   that it clears Map and Satellite on the narrowest maps. */
+#map .gm-style .avalon-mapctl--corner .avalon-mapctl__reset {
+  padding: 0 12px;
+}
+
+#map .gm-style .avalon-mapctl button:focus {
+  outline: none;
+  background-color: #fff;
+}
+
+#map .gm-style .avalon-mapctl button:hover {
+  background-color: #fff;
+  color: #333;
+}
+
+#map .gm-style .avalon-mapctl .avalon-mapctl__reset:hover {
+  background-color: #ebebeb;
+  color: #000;
+}
+
+#map .gm-style .avalon-mapctl button:active {
+  color: #111;
+}
+
+#map .gm-style .avalon-mapctl button[aria-disabled="true"],
+#map .gm-style .avalon-mapctl button[aria-disabled="true"]:hover {
+  background-color: #fff;
+  color: #d1d1d1;
+  cursor: default;
+}
+
+#map .gm-style .avalon-mapctl button:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: -4px;
+}
+
+/* + and -, drawn: 16 px bars, 2 px thick, in the button's colour. */
+#map .gm-style .avalon-mapctl__in::before,
+#map .gm-style .avalon-mapctl__in::after,
+#map .gm-style .avalon-mapctl__out::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 2px;
+  margin: -1px 0 0 -8px;
+  background-color: currentColor;
+}
+
+#map .gm-style .avalon-mapctl__in::after {
+  transform: rotate(90deg);
 }

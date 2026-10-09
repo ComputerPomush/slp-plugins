@@ -1,6 +1,6 @@
 RelativePath,MD5Hash
-slp-plugins\slp_avalon\assets\js\slp_avalon.js,5df0fcc4ea5d403e897e99f49f869afa
-slp-plugins\slp_avalon\inc\class.slp_avalon.php,778185553d663139707b9d23dff00407
+slp-plugins\slp_avalon\assets\js\slp_avalon.js,7f419ecd4f21cf1b15cfa0656bb26eca
+slp-plugins\slp_avalon\inc\class.slp_avalon.php,9d88d8e446fd02f1902e21866914ad0f
 slp-plugins\slp_avalon\slp_avalon.php,722c773a929cea089521bf502a9e8e23
 slp-plugins\.gitattributes,04834ee26f61a5bea9c2a1af9334d9fa
 slp-plugins\store-locator-le\js\slp_core.js,a751bea043c19472ec6453aff93f84a9
@@ -24,7 +24,7 @@ slp-plugins\build\build-v027-part3a.py,39e01e5bc24ae4e60ea29ee8ffc23aa3
 slp-plugins\test\suite-v031.php,9cc8a3c24704f39d3582aae06dae7463
 slp-plugins\build\control-v031.py,e9cd96cf8fc75f4074d5169aa145eaa0
 slp-plugins\build\build-v027-part3b.py,9a31c661d6f3de2f6b6762c992c77762
-slp-plugins\slp_avalon\assets\css\avalon-hours.css,8e862ce347b040f329b77969c226165b
+slp-plugins\slp_avalon\assets\css\avalon-hours.css,04fd4a0034c9f8c8959454bca34ef14a
 slp-plugins\slp_avalon\assets\js\avalon-hours.js,588939bf366c2760ba46127d6d9951a6
 slp-plugins\test\suite-v032.php,8ff4eb8d1055b2f13abfcf773301ee11
 slp-plugins\test\suite-hours.js,4ac1f2eac8916dff7605ee5da1869cd3
@@ -36,7 +36,7 @@ slp-plugins\test\suite-bubble.js,f3dc9c166ba00e2f2b0f451263f400ae
 slp-plugins\build\control-v033.py,1683418fa311370f4d54fa7978adeee1
 slp-plugins\build\build-v027-part4c.py,f20b4759d7b663ef22095b7bed324c04
 slp-plugins\test\suite-v034.php,59afa37eefb4ece32e591b775d173323
-slp-plugins\test\suite-map.js,37c5abdebc2b543d3e316a11fe69bdde
+slp-plugins\test\suite-map.js,d2dc102ef132eb38d6e29a856dc3eeaf
 slp-plugins\build\control-v034.py,a9c88c9c20d65a96f6b169915c1f07d5
 slp-plugins\build\build-v027-part4d.py,73ce7024ae1be0131c123f896cd186e9
 slp-plugins\test\suite-v035.php,f28c0d8fe43db763dfe38262008e037d
@@ -45,3 +45,6 @@ slp-plugins\build\control-v035.py,50c83ba80fe4898a66b68f43f63133ed
 slp-plugins\build\build-v027-part4e.py,b635a0907ac819b6b99f03eb3a2a8cae
 slp-plugins\test\suite-v036.php,9879505b221adc9b5227f332f5765eec
 slp-plugins\build\control-v036.py,7487715f49b94a599c4cdeacc88850be
+slp-plugins\build\build-v027-part4f.py,388531b6e3e1213005f9170dd7ccab4b
+slp-plugins\test\suite-v037.php,dd10a4bc5e0c84a2c51480785bd8c60a
+slp-plugins\build\control-v037.py,3827f138ccca24f2b84b20157ce3ac98
